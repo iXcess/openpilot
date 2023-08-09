@@ -14,7 +14,7 @@
 
 #define UNUSED(x) (void)(x)
 
-#ifdef QCOM2
+#ifdef QCOM3
 // TODO: decide if we want to install libi2c-dev everywhere
 extern "C" {
   #include <linux/i2c-dev.h>

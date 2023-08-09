@@ -84,8 +84,10 @@ lenv = {
 
 rpath = lenv["LD_LIBRARY_PATH"].copy()
 
-if arch == "larch64":
-  lenv["LD_LIBRARY_PATH"] += ['/data/data/com.termux/files/usr/lib']
+if arch == "larch64" or arch == "aarch64":
+  if arch == "aarch64":
+      pass
+  else: lenv["LD_LIBRARY_PATH"] += ['/data/data/com.termux/files/usr/lib']
 
   cpppath = [
     "#third_party/opencl/include",
@@ -105,6 +107,11 @@ if arch == "larch64":
   ]
   cflags = ["-DQCOM2", "-mcpu=cortex-a57"]
   cxxflags = ["-DQCOM2", "-mcpu=cortex-a57"]
+
+  if arch == "aarch64":
+      cflags.append("-DRK3588")
+      cxxflags.append("-DRK3588")
+
   rpath += ["/usr/local/lib"]
 else:
   cflags = []
@@ -216,6 +223,7 @@ env = Environment(
     "#opendbc/can",
     "#selfdrive/boardd",
     "#common",
+    "/home/ubuntu/.pyenv/versions/3.11.4/lib",
   ],
   CYTHONCFILESUFFIX=".cpp",
   COMPILATIONDB_USE_ABSPATH=True,
@@ -304,6 +312,9 @@ else:
   if arch == "larch64":
     qt_libs += ["GLESv2", "wayland-client"]
     qt_env.PrependENVPath('PATH', Dir("#third_party/qt5/larch64/bin/").abspath)
+  #elif arch == "aarch64":
+  #  qt_libs += ["GLESv2", "MesaGL"]
+  #  qt_env.PrependENVPath('PATH', Dir("#third_party/qt5/larch64/bin/").abspath)
   elif arch != "Darwin":
     qt_libs += ["GL"]
 qt_env['QT3DIR'] = qt_env['QTDIR']

@@ -28,7 +28,7 @@ const char frame_vertex_shader[] =
   "  vTexCoord = aTexCoord;\n"
   "}\n";
 
-#ifdef QCOM2
+#ifdef QCOM3
 const char frame_fragment_shader[] =
   "#version 300 es\n"
   "#extension GL_OES_EGL_image_external_essl3 : enable\n"
@@ -165,7 +165,7 @@ void CameraWidget::initializeGL() {
 
   glUseProgram(program->programId());
 
-#ifdef QCOM2
+#ifdef QCOM3
   glUniform1i(program->uniformLocation("uTexture"), 0);
 #else
   glGenTextures(2, textures);
@@ -281,7 +281,7 @@ void CameraWidget::paintGL() {
   glUseProgram(program->programId());
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-#ifdef QCOM2
+#ifdef QCOM3
   // no frame copy
   glActiveTexture(GL_TEXTURE0);
   glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, egl_images[frame->idx]);
@@ -318,7 +318,7 @@ void CameraWidget::vipcConnected(VisionIpcClient *vipc_client) {
   stream_height = vipc_client->buffers[0].height;
   stream_stride = vipc_client->buffers[0].stride;
 
-#ifdef QCOM2
+#ifdef QCOM3
   egl_display = eglGetCurrentDisplay();
 
   for (auto &pair : egl_images) {
@@ -412,7 +412,7 @@ void CameraWidget::vipcThread() {
     }
   }
 
-#ifdef QCOM2
+#ifdef QCOM3
   for (auto &pair : egl_images) {
     eglDestroyImageKHR(egl_display, pair.second);
   }

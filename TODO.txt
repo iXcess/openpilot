@@ -1,0 +1,1 @@
+1. sudo apt-get install libi2c-dev (Do I really need this?)

@@ -26,19 +26,7 @@ QByteArray rsa_sign(const QByteArray &data) {
     return {};
   }
 
-  BIO* mem = BIO_new_mem_buf(key.data(), key.size());
-  assert(mem);
-  RSA* rsa_private = PEM_read_bio_RSAPrivateKey(mem, NULL, NULL, NULL);
-  assert(rsa_private);
-  auto sig = QByteArray();
-  sig.resize(RSA_size(rsa_private));
-  unsigned int sig_len;
-  int ret = RSA_sign(NID_sha256, (unsigned char*)data.data(), data.size(), (unsigned char*)sig.data(), &sig_len, rsa_private);
-  assert(ret == 1);
-  assert(sig_len == sig.size());
-  BIO_free(mem);
-  RSA_free(rsa_private);
-  return sig;
+  return {};
 }
 
 QString create_jwt(const QJsonObject &payloads, int expiry) {
