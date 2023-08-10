@@ -3,7 +3,7 @@
 #include "system/hardware/base.h"
 #include "common/util.h"
 
-#if QCOM2
+#if QCOM3
 #include "system/hardware/tici/hardware.h"
 #define Hardware HardwareTici
 #else

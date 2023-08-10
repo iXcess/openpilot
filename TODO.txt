@@ -1,1 +1,7 @@
 1. sudo apt-get install libi2c-dev (Do I really need this?)
+2. create a /data folder and sudo chown ubuntu:ubuntu /data, this is to allow creation of bootlogs, params and pythonpath
+
+
+Things to do:
+1. Build openpilot completely, get to run until the homepage without error (DONE)
+2. Replace all QCOM2, treating it as aarch64 with RK3588 flag
