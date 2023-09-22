@@ -62,6 +62,13 @@ HYUNDAI IONIQ 6 2023: [2.5, 2.5, 0.1]
 HYUNDAI AZERA 6TH GEN: [1.8, 1.8, 0.1]
 KIA K8 HYBRID 1ST GEN: [2.5, 2.5, 0.1]
 PROTON X50: [2.5, 2.5, 0.1]
+PERODUA ALZA: [2.5, 2.5, 0.1]
+PERODUA ARUZ: [2.5, 2.5, 0.1]
+PERODUA ATIVA: [2.5, 2.5, 0.1]
+PERODUA AXIA: [2.5, 2.5, 0.1]
+PERODUA MYVI: [2.5, 2.5, 0.1]
+PERODUA BEZZA: [2.5, 2.5, 0.1]
+PERODUA MYVI PSD: [2.5, 2.5, 0.1]
 
 # Dashcam or fallback configured as ideal car
 mock: [10.0, 10, 0.0]
