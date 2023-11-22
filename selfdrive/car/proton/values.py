@@ -22,7 +22,7 @@ FINGERPRINTS = {
 }
 
 DBC = {
-  CAR.X50: dbc_dict('proton_general_pt', None),
+  CAR.X50: dbc_dict('proton_general_pt', 'proton_general_pt'),
 }
 
 # Todo

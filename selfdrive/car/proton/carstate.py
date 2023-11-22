@@ -27,14 +27,14 @@ class CarState(CarStateBase):
     self.stock_ldp_cmd = 0
     self.steer_dir = 0
 
-  def update(self, cp):
+  def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
 
-    self.stock_lks_settings = cp.vl["ADAS_LKAS"]["STOCK_LKS_SETTINGS"]
-    self.stock_ldp_cmd = cp.vl["ADAS_LKAS"]["STEER_CMD"]
-    self.stock_lks_settings2 = cp.vl["ADAS_LKAS"]["SET_ME_1_1"]
-    self.steer_dir = cp.vl["ADAS_LKAS"]["STEER_DIR"]
-    self.stock_ldp = bool(cp.vl["LKAS"]["LANE_DEPARTURE_WARNING_RIGHT"]) or bool(cp.vl["LKAS"]["LANE_DEPARTURE_WARNING_LEFT"])
+    self.stock_lks_settings = cp_cam.vl["ADAS_LKAS"]["STOCK_LKS_SETTINGS"]
+    self.stock_ldp_cmd = cp_cam.vl["ADAS_LKAS"]["STEER_CMD"]
+    self.stock_lks_settings2 = cp_cam.vl["ADAS_LKAS"]["SET_ME_1_1"]
+    self.steer_dir = cp_cam.vl["ADAS_LKAS"]["STEER_DIR"]
+    self.stock_ldp = bool(cp_cam.vl["LKAS"]["LANE_DEPARTURE_WARNING_RIGHT"]) or bool(cp_cam.vl["LKAS"]["LANE_DEPARTURE_WARNING_LEFT"])
 
     ret.wheelSpeeds = self.get_wheel_speeds(
       cp.vl["WHEEL_SPEED"]['WHEELSPEED_F'],
@@ -78,9 +78,9 @@ class CarState(CarStateBase):
     self.prev_angle = ret.steeringAngleDeg
     ret.steeringTorque = cp.vl["STEERING_TORQUE"]['MAIN_TORQUE'] * steer_dir
     ret.steeringTorqueEps = cp.vl["STEERING_MODULE"]['STEER_RATE'] * steer_dir
-    ret.steeringPressed = bool(abs(ret.steeringTorqueEps) > 5)
-    self.hand_on_wheel_warning = bool(cp.vl["ADAS_LKAS"]["HAND_ON_WHEEL_WARNING"])
-    self.is_icc_on = bool(cp.vl["PCM_BUTTONS"]["ICC_ON"])
+    ret.steeringPressed = bool(abs(ret.steeringTorqueEps) > 10)
+    self.hand_on_wheel_warning = bool(cp_cam.vl["ADAS_LKAS"]["HAND_ON_WHEEL_WARNING"])
+    self.is_icc_on = bool(cp_cam.vl["PCM_BUTTONS"]["ICC_ON"])
 
     ret.vEgoCluster = ret.vEgo * HUD_MULTIPLIER
 
@@ -88,23 +88,23 @@ class CarState(CarStateBase):
     ret.stockAeb = False
     ret.stockFcw = False
 
-    self.acc_req = bool(cp.vl["ACC_CMD"]["ACC_REQ"])
+    self.acc_req = bool(cp_cam.vl["ACC_CMD"]["ACC_REQ"])
     ret.cruiseState.available = True
 
-    distance_val = int(cp.vl["PCM_BUTTONS"]['SET_DISTANCE'])
+    distance_val = int(cp_cam.vl["PCM_BUTTONS"]['SET_DISTANCE'])
 
     # engage and disengage logic
-    if cp.vl["PCM_BUTTONS"]["ACC_SET"] == 0 and ret.brakePressed:
+    if cp_cam.vl["PCM_BUTTONS"]["ACC_SET"] == 0 and ret.brakePressed:
       self.is_cruise_latch = False
 
-    if cp.vl["PCM_BUTTONS"]["ACC_SET"] != 0 and not ret.brakePressed:
+    if cp_cam.vl["PCM_BUTTONS"]["ACC_SET"] != 0 and not ret.brakePressed:
       self.is_cruise_latch = True
 
     # set speed in range of 30 - 130kmh only
-    self.cruise_speed = int(cp.vl["PCM_BUTTONS"]['ACC_SET_SPEED']) * CV.KPH_TO_MS
+    self.cruise_speed = int(cp_cam.vl["PCM_BUTTONS"]['ACC_SET_SPEED']) * CV.KPH_TO_MS
     ret.cruiseState.speedCluster = self.cruise_speed
-    ret.cruiseState.speed = ret.cruiseState.speedCluster / HUD_MULTIPLIER
-    ret.cruiseState.standstill = bool(cp.vl["ACC_CMD"]["STANDSTILL2"])
+    ret.cruiseState.speed = ret.cruiseState.speedCluster / 1.03
+    ret.cruiseState.standstill = bool(cp_cam.vl["ACC_CMD"]["STANDSTILL2"])
     ret.cruiseState.nonAdaptive = False
 
     if not ret.cruiseState.available:
@@ -136,9 +136,7 @@ class CarState(CarStateBase):
   def get_can_parser(CP):
     signals = [
       # sig_name, sig_address, default
-      ("ADAS_LEAD_DETECT", 0),
       ("WHEEL_SPEED", 0),
-      ("PCM_BUTTONS", 0),
       ("TRANSMISSION", 0),
       ("GAS_PEDAL", 0),
       ("BRAKE", 0),
@@ -150,9 +148,18 @@ class CarState(CarStateBase):
       ("SEATBELTS", 0),
       ("DOOR_LEFT_SIDE", 0),
       ("DOOR_RIGHT_SIDE", 0),
-      ("ACC_CMD", 0),
-      ("ADAS_LKAS", 0),
-      ("LKAS", 0),
     ]
 
     return CANParser(DBC[CP.carFingerprint]['pt'], signals, 0)
+
+  @staticmethod
+  def get_cam_can_parser(CP):
+    signals = [
+      # sig_name, sig_address, default
+      ("ACC_CMD", 0),
+      ("PCM_BUTTONS", 0),
+      ("LKAS", 0),
+      ("ADAS_LKAS", 0),
+    ]
+
+    return CANParser(DBC[CP.carFingerprint]['pt'], signals, 2)

@@ -108,9 +108,7 @@ def create_pcm(packer, steer, steer_req, raw_cnt):
 
 def create_acc_cmd(packer, accel, enabled, raw_cnt):
   accel = clip(accel, -3, 3)
-#  if accel < 0 and accel > -0.1:
-  #  enabled = False
-
+  print(accel)
   values = {
     "CMD": 0x8C14 if enabled else 0x8C14,
     #"CMD": 0xA005 if enabled else 0x8C14,

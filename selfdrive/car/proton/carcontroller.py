@@ -9,6 +9,26 @@ from common.realtime import DT_CTRL
 from common.params import Params
 import cereal.messaging as messaging
 
+def decel_hysteresis(accel, last_hys_on):
+  # hysteresis threshold
+  hys_lower = -0.05
+  hys_upper = 0
+  hys_on = False
+
+  # logic to check if we should leave or enter the hysteresis
+  if not last_hys_on and accel < hys_lower:
+    hys_on = True
+  if last_hys_on and accel >= hys_upper:
+    hys_on = False
+
+  if hys_on:
+    accel = accel
+  else:
+    accel = 0
+
+  return accel, hys_on
+
+
 def apply_proton_steer_torque_limits(apply_torque, apply_torque_last, driver_torque, LIMITS):
 
   # limits due to driver torque
@@ -48,6 +68,7 @@ class CarController():
     self.packer = CANPacker(DBC[CP.carFingerprint]['pt'])
     self.num_cruise_btn_sent = 0
     self.frame = 0
+    self.last_hys_on = False
 
   def update(self, CC, CS, now_nanos):
     can_sends = []
@@ -61,7 +82,7 @@ class CarController():
 
     # steer
     new_steer = int(round(actuators.steer * self.params.STEER_MAX))
-    apply_steer = apply_proton_steer_torque_limits(new_steer, self.last_steer, CS.out.steeringTorque, self.params)
+    apply_steer = apply_proton_steer_torque_limits(new_steer, self.last_steer, 0, self.params)
 
     self.steer_rate_limited = (new_steer != apply_steer) and (apply_steer != 0)
 
@@ -74,7 +95,7 @@ class CarController():
         apply_steer = CS.stock_ldp_cmd * steer_dir
         lat_active |= True
       can_sends.append(create_can_steer_command(self.packer, apply_steer, lat_active, CS.hand_on_wheel_warning and CS.is_icc_on, (self.frame/2) % 16, CS.stock_lks_settings,  CS.stock_lks_settings2))
-
+#      actuators.accel, self.last_hys_on = decel_hysteresis(actuators.accel, self.last_hys_on)
       can_sends.append(create_acc_cmd(self.packer, actuators.accel, CC.longActive, (self.frame/2) % 16))
 
     if CS.out.standstill and CC.longActive and (self.frame % 50 == 0):

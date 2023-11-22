@@ -23,16 +23,14 @@ class CarInterface(CarInterfaceBase):
     ret.steerControlType = car.CarParams.SteerControlType.torque
     ret.steerActuatorDelay = 0.2          # Steering wheel actuator delay in seconds
 
-    ret.lateralTuning.init('pid')
-    ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.], [0.]]
-    ret.longitudinalTuning.kpV = [0.9, 0.8, 0.8]
 
+    CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
     ret.enableGasInterceptor = 0x201 in fingerprint[0] or 0x401 in fingerprint[0]
     ret.openpilotLongitudinalControl = True
 
     if candidate == CAR.X50:
       ret.wheelbase = 2.6
-      ret.steerRatio = 15.00
+      ret.steerRatio = 13.00
       ret.centerToFront = ret.wheelbase * 0.44
       tire_stiffness_factor = 0.9871
       ret.mass = 1370. + STD_CARGO_KG
@@ -40,23 +38,24 @@ class CarInterface(CarInterfaceBase):
 
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0.], [550]]
 
-      ret.lateralTuning.pid.kpBP = [0., 10., 30., 40.]
-      ret.lateralTuning.pid.kpV = [0.05, 0.10, 0.15, 0.16]
-      ret.lateralTuning.pid.kiBP = [0., 20., 30.]
-      ret.lateralTuning.pid.kiV = [0.08, 0.30, 0.45]
-      ret.lateralTuning.pid.kf = 0.00008
+#      ret.lateralTuning.init('pid')
+#      ret.lateralTuning.pid.kpBP = [0., 10., 30., 40.]
+#      ret.lateralTuning.pid.kpV = [0.02, 0.05, 0.08, 0.10]
+#      ret.lateralTuning.pid.kiBP = [0., 20., 30.]
+#      ret.lateralTuning.pid.kiV = [0.08, 0.30, 0.45]
+#      ret.lateralTuning.pid.kf = 0.00008
 
       ret.longitudinalTuning.kpBP = [0., 4., 20.]
-      ret.longitudinalTuning.kpV = [1.2, 1.0, 0.4]
-      ret.longitudinalActuatorDelayLowerBound = 0.2
-      ret.longitudinalActuatorDelayUpperBound = 0.3
+      ret.longitudinalTuning.kpV = [1.2, 1.0, 0.6]
+      ret.longitudinalActuatorDelayLowerBound = 0.1
+      ret.longitudinalActuatorDelayUpperBound = 0.2
 
     else:
       ret.dashcamOnly = True
       ret.safetyModel = car.CarParams.SafetyModel.noOutput
 
     ret.longitudinalTuning.kiBP = [0., 5., 20.]
-    ret.longitudinalTuning.kiV = [.32, .20, .07]
+    ret.longitudinalTuning.kiV = [.32, .20, .05]
 
     ret.minEnableSpeed = -1
     ret.enableBsm = True
@@ -69,7 +68,7 @@ class CarInterface(CarInterfaceBase):
 
   # returns a car.CarState
   def _update(self, c):
-    ret = self.CS.update(self.cp)
+    ret = self.CS.update(self.cp, self.cp_cam)
     ret.canValid = self.cp.can_valid
 
     # events
