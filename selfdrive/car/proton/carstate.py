@@ -78,7 +78,7 @@ class CarState(CarStateBase):
     self.prev_angle = ret.steeringAngleDeg
     ret.steeringTorque = cp.vl["STEERING_TORQUE"]['MAIN_TORQUE'] * steer_dir
     ret.steeringTorqueEps = cp.vl["STEERING_MODULE"]['STEER_RATE'] * steer_dir
-    ret.steeringPressed = bool(abs(ret.steeringTorqueEps) > 10)
+    ret.steeringPressed = bool(abs(ret.steeringTorqueEps) > 8.5)
     self.hand_on_wheel_warning = bool(cp_cam.vl["ADAS_LKAS"]["HAND_ON_WHEEL_WARNING"])
     self.is_icc_on = bool(cp_cam.vl["PCM_BUTTONS"]["ICC_ON"])
 
@@ -103,7 +103,7 @@ class CarState(CarStateBase):
     # set speed in range of 30 - 130kmh only
     self.cruise_speed = int(cp_cam.vl["PCM_BUTTONS"]['ACC_SET_SPEED']) * CV.KPH_TO_MS
     ret.cruiseState.speedCluster = self.cruise_speed
-    ret.cruiseState.speed = ret.cruiseState.speedCluster / 1.03
+    ret.cruiseState.speed = ret.cruiseState.speedCluster / HUD_MULTIPLIER
     ret.cruiseState.standstill = bool(cp_cam.vl["ACC_CMD"]["STANDSTILL2"])
     ret.cruiseState.nonAdaptive = False
 

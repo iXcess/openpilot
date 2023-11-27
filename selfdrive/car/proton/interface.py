@@ -47,8 +47,8 @@ class CarInterface(CarInterfaceBase):
 
       ret.longitudinalTuning.kpBP = [0., 4., 20.]
       ret.longitudinalTuning.kpV = [1.2, 1.0, 0.6]
-      ret.longitudinalActuatorDelayLowerBound = 0.1
-      ret.longitudinalActuatorDelayUpperBound = 0.2
+      ret.longitudinalActuatorDelayLowerBound = 0.3
+      ret.longitudinalActuatorDelayUpperBound = 0.4
 
     else:
       ret.dashcamOnly = True
@@ -58,6 +58,11 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalTuning.kiV = [.32, .20, .05]
 
     ret.minEnableSpeed = -1
+    ret.stopAccel = -0.8
+    ret.vEgoStarting = 0.1
+    ret.stoppingControl = True
+    ret.startingState = True
+    ret.startAccel = 2.0
     ret.enableBsm = True
     ret.stoppingDecelRate = 0.02 # reach stopping target smoothly
 

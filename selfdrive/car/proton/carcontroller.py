@@ -11,9 +11,9 @@ import cereal.messaging as messaging
 
 def decel_hysteresis(accel, last_hys_on):
   # hysteresis threshold
-  hys_lower = -0.05
+  hys_lower = -0.2
   hys_upper = 0
-  hys_on = False
+  hys_on = last_hys_on
 
   # logic to check if we should leave or enter the hysteresis
   if not last_hys_on and accel < hys_lower:
@@ -21,7 +21,7 @@ def decel_hysteresis(accel, last_hys_on):
   if last_hys_on and accel >= hys_upper:
     hys_on = False
 
-  if hys_on:
+  if hys_on or accel > 0:
     accel = accel
   else:
     accel = 0
@@ -95,8 +95,8 @@ class CarController():
         apply_steer = CS.stock_ldp_cmd * steer_dir
         lat_active |= True
       can_sends.append(create_can_steer_command(self.packer, apply_steer, lat_active, CS.hand_on_wheel_warning and CS.is_icc_on, (self.frame/2) % 16, CS.stock_lks_settings,  CS.stock_lks_settings2))
-#      actuators.accel, self.last_hys_on = decel_hysteresis(actuators.accel, self.last_hys_on)
-      can_sends.append(create_acc_cmd(self.packer, actuators.accel, CC.longActive, (self.frame/2) % 16))
+      actuators.accel, self.last_hys_on = decel_hysteresis(actuators.accel, self.last_hys_on)
+      can_sends.append(create_acc_cmd(self.packer, actuators.accel, CC.longActive, (self.frame/2) % 16, CS.out.standstill))
 
     if CS.out.standstill and CC.longActive and (self.frame % 50 == 0):
       # Spam resume button to resume from standstill at max freq of 10 Hz.
