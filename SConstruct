@@ -85,9 +85,7 @@ lenv = {
 rpath = lenv["LD_LIBRARY_PATH"].copy()
 
 if arch == "larch64" or arch == "aarch64":
-  if arch == "aarch64":
-      pass
-  else: lenv["LD_LIBRARY_PATH"] += ['/data/data/com.termux/files/usr/lib']
+  lenv["LD_LIBRARY_PATH"] += ['/data/data/com.termux/files/usr/lib']
 
   cpppath = [
     "#third_party/opencl/include",

@@ -4,4 +4,9 @@
 
 Things to do:
 1. Build openpilot completely, get to run until the homepage without error (DONE)
-2. Replace all QCOM2, treating it as aarch64 with RK3588 flag
+2. Run KommuSafety on the board and launch onroad view.
+3. Replace all QCOM2, treating it as aarch64 with RK3588 flag
+
+
+Note:
+1. Do not work on UI related port first
