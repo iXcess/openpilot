@@ -20,50 +20,23 @@ static void dump_tensor_attr(rknn_tensor_attr* attr)
          get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale);
 }
 
-static unsigned char* load_model(const char* filename, int* model_size)
-{
-  FILE* fp = fopen(filename, "rb");
-  if (fp == nullptr) {
-    LOGD("fopen %s fail!\n", filename);
-    return NULL;
-  }
-  fseek(fp, 0, SEEK_END);
-  int            model_len = ftell(fp);
-  unsigned char* model     = (unsigned char*)malloc(model_len);
-  fseek(fp, 0, SEEK_SET);
-  if (model_len != fread(model, 1, model_len, fp)) {
-    LOGD("fread %s fail!\n", filename);
-    free(model);
-    return NULL;
-  }
-  *model_size = model_len;
-  if (fp) {
-    fclose(fp);
-  }
-  return model;
-}
-
 RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size, int runtime, bool _use_tf8, cl_context context) {
   output = _output;
   output_size = _output_size;
   ctx = 0;
 
-  int model_len = 0;
-  unsigned char* modelptr = load_model(path.c_str(), &model_len);
-
-  //std::string model_data;
-  //model_data = util::read_file(path);
-  //unsigned char lala[model_data.length() + 1];
-  //std::copy(model_data.data(), model_data.data() + model_data.length() + 1, lala);
+  std::string model_data;
+  model_data = util::read_file(path);
+  std::vector<unsigned char> buffer(model_data.begin(), model_data.end());
+  unsigned char* modelptr = buffer.data();
+  size_t model_len = buffer.size();
 
   // load model
-  int ret = rknn_init(&ctx, modelptr, model_len, 0, NULL);
+  int ret = rknn_init(&ctx, (void *) modelptr, model_len, 0, NULL);
   assert(model_len > 0);
-  LOGD("loaded model with size: %d", model_len);
-  free(modelptr);
 
   // NPU core setting to use all of them
-  rknn_set_core_mask(ctx, RKNN_NPU_CORE_0_1_2);
+  rknn_set_core_mask(ctx, RKNN_NPU_CORE_0);
   // TODO: What is this for? rknn_set_batch_core_num(ctx, 2);
 
   // get sdk and driver version
@@ -80,7 +53,7 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   memset(input_attrs, 0, io_num.n_input * sizeof(rknn_tensor_attr));
   for (uint32_t i = 0; i < io_num.n_input; i++) {
     input_attrs[i].index = i;
-    ret = rknn_query(ctx, RKNN_QUERY_INPUT_ATTR, &(input_attrs[i]), sizeof(rknn_tensor_attr));
+    ret = rknn_query(ctx, RKNN_QUERY_NATIVE_INPUT_ATTR, &(input_attrs[i]), sizeof(rknn_tensor_attr));
     assert(ret == RKNN_SUCC);
     dump_tensor_attr(&input_attrs[i]);
   }
@@ -90,7 +63,7 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   memset(output_attrs, 0, io_num.n_output * sizeof(rknn_tensor_attr));
   for (uint32_t i = 0; i < io_num.n_output; i++) {
     output_attrs[i].index = i;
-    ret = rknn_query(ctx, RKNN_QUERY_OUTPUT_ATTR, &(output_attrs[i]), sizeof(rknn_tensor_attr));
+    ret = rknn_query(ctx, RKNN_QUERY_NATIVE_OUTPUT_ATTR, &(output_attrs[i]), sizeof(rknn_tensor_attr));
     assert(ret == RKNN_SUCC);
     dump_tensor_attr(&output_attrs[i]);
   }
@@ -100,9 +73,9 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   for (uint32_t i = 0; i < io_num.n_input; i++) {
     rknn_inputs[i].index = i;
     rknn_inputs[i].pass_through = 0;
-    rknn_inputs[i].type = input_attrs[i].type;
+    rknn_inputs[i].type = RKNN_TENSOR_FLOAT32; //input_attrs[i].type;
     rknn_inputs[i].fmt = input_attrs[i].fmt;
-    rknn_inputs[i].size = input_attrs[i].size;
+    rknn_inputs[i].size = input_attrs[i].size * 2; // *2 because of float32
     rknn_inputs[i].buf = NULL;
   }
 
@@ -116,12 +89,21 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
 }
 
 void RKNNModel::addInput(const std::string name, float *buffer, int size) {
+  // make the flattened buffer into the correct shape
   inputs.push_back(std::unique_ptr<RKNNModelInput>(new RKNNModelInput(name, buffer, size, nullptr)));
 }
 
 void RKNNModel::execute() {
   for (uint32_t i = 0; i < io_num.n_input; i++) {
-    rknn_inputs[i].buf = inputs[i]->buffer;
+    if (i < 2) {
+      //rknn_inputs[i].pass_through = 1;
+      rknn_inputs[i].fmt = (rknn_tensor_format) 1;
+      rknn_inputs[i].buf = inputs[i]->buffer;
+    } else {
+      rknn_inputs[i].buf = inputs[i]->buffer;
+    }
+    //memcpy(rknn_inputs[i].buf, (float *) inputs[i]->buffer, inputs[i]->size * 4);
+    //LOGE("Name %s, %f,%f,%f", (inputs[i]->name).c_str(), inputs[i]->buffer[0], inputs[i]->buffer[1], inputs[i]->buffer[2]);
   }
 
   rknn_inputs_set(ctx, io_num.n_input, rknn_inputs);
@@ -133,4 +115,5 @@ void RKNNModel::execute() {
   assert(io_num.n_output == 1);
   memcpy(output, (float *) rknn_outputs[0].buf, rknn_outputs[0].size);
   output_size = rknn_outputs[0].size;
+  //LOGE("Out size %zu", output_size);
 }

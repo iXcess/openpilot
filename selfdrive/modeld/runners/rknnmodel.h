@@ -6,7 +6,7 @@
 
 
 struct RKNNModelInput : public ModelInput {
-  float *rknn_buffer; // TODO: what is this for?
+  float *rknn_buffer;
 
   RKNNModelInput(const std::string _name, float *_buffer, int _size, float *_rknn_buffer) : ModelInput(_name, _buffer, _size), rknn_buffer(std::move(_rknn_buffer)) {}
   void setBuffer(float *_buffer, int _size) {

@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
 
-import itertools
-import os
-import sys
-import time
 import numpy as np
-from typing import Tuple, Dict, Union, Any
 
 from openpilot.selfdrive.modeld.runners.runmodel_pyx import RunModel  #(TODO add 1)
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from rknnlite.api import RKNNLite
-
-ORT_TYPES_TO_NP_TYPES = {'tensor(float16)': np.float16, 'tensor(float)': np.float32, 'tensor(uint8)': np.uint8}
 
 class RKNNModel(RunModel): #(TODO add 2)
 # class RKNNModel():
@@ -45,20 +38,9 @@ class RKNNModel(RunModel): #(TODO add 2)
     'features_buffer': np.float16
     }
 
-    ### TODO current problem with getting the input names, shape and dtypes needed by the rknn model (through python)
-
-    # self.session = create_rknn_session(path, fp16_to_fp32=True)
-    # self.input_names = [x.name for x in self.session.get_inputs()]
-    # self.input_shapes = {x.name: [1, *x.shape[1:]] for x in self.session.get_inputs()}
-    # self.input_dtypes = {x.name: ORT_TYPES_TO_NP_TYPES[x.type] for x in self.session.get_inputs()}
-
-    ################################################################
-    # initialise NPU on Rockchip
     self.rknn = RKNNLite(verbose=False)
     self.rknn.load_rknn(path)
     self.rknn.init_runtime()
-    ################################################################
-
 
   def addInput(self, name, buffer):
     assert name in self.input_names
@@ -75,11 +57,11 @@ class RKNNModel(RunModel): #(TODO add 2)
     # input shaping and formatting
     inputs = {k: (v.view(np.uint8) / 255. if self.use_tf8 and k == 'input_img' else v) for k,v in self.inputs.items()}
     inputs = {k: v.reshape(self.input_shapes[k]).astype(self.input_dtypes[k]) for k,v in inputs.items()}
+    inputs = [inputs[input_name] for input_name in self.input_names]
+
     # running inputs through model
-    mt1 = time.perf_counter()
-    outputs = self.rknn.inference(inputs=[inputs[input_name] for input_name in self.input_names], data_format=['nchw','nchw', 'nchw','nchw' , 'nchw', 'nchw', 'nchw', 'nchw', 'nchw'])
-    mt2 = time.perf_counter()
-    print("Raw execution time: " + str(mt2-mt1))
+    outputs = self.rknn.inference(inputs=inputs, data_type="float16", inputs_pass_through=[0,0,0,0,0,0,0,0,0], \
+                                  data_format=['nchw', 'nchw', 'nchw', 'nchw', 'nchw', 'nchw', 'nchw', 'nchw', 'nchw'])
     # check that the output is valid
     assert len(outputs) == 1, "Only single model outputs are supported"
     self.output[:] = outputs[0]
@@ -115,6 +97,4 @@ if __name__ == '__main__':
   for k,v in inputs.items():
       inputs[k][:] = v
 
-  for i in range(1000):
-      print(model.execute())
-
+  model.execute()
