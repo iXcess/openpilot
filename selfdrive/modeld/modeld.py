@@ -153,8 +153,8 @@ def main(demo=False):
     cloudlog.warning(f"connected extra cam with buffer size: {vipc_client_extra.buffer_len} ({vipc_client_extra.width} x {vipc_client_extra.height})")
 
   # messaging
-  pm = PubMaster(["modelV2", "cameraOdometry"])
-  sm = SubMaster(["carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carControl"])
+  pm = PubMaster(["cameraOdometry"])
+  sm = SubMaster(["modelV2", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carControl"])
 
   publish_state = PublishState()
   params = Params()
@@ -224,6 +224,8 @@ def main(demo=False):
     sm.update(0)
     desire = DH.desire
     is_rhd = sm["driverMonitoringState"].isRHD
+    position = sm["modelV2"].position
+    print("MODELV2: " + str(position))
     frame_id = sm["roadCameraState"].frameId
     lateral_control_params = np.array([sm["carState"].vEgo, steer_delay], dtype=np.float32)
     if sm.updated["liveCalibration"]:
@@ -287,6 +289,7 @@ def main(demo=False):
     model_output = model.run(buf_main, buf_extra, model_transform_main, model_transform_extra, inputs, prepare_only)
     mt2 = time.perf_counter()
     model_execution_time = mt2 - mt1
+    print("execution time: " + str(model_execution_time))
 
     if model_output is not None:
       modelv2_send = messaging.new_message('modelV2')
@@ -294,6 +297,7 @@ def main(demo=False):
       fill_model_msg(modelv2_send, model_output, publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id, frame_drop_ratio,
                       meta_main.timestamp_eof, timestamp_llk, model_execution_time, nav_enabled, live_calib_seen)
 
+      print("RKNN: " + str(modelv2_send.modelV2.position))
       desire_state = modelv2_send.modelV2.meta.desireState
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
@@ -303,7 +307,7 @@ def main(demo=False):
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
 
       fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, meta_main.timestamp_eof, live_calib_seen)
-      pm.send('modelV2', modelv2_send)
+      #pm.send('modelV2', modelv2_send)
       pm.send('cameraOdometry', posenet_send)
 
     last_vipc_frame_id = meta_main.frame_id
