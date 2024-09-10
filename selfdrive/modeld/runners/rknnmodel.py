@@ -6,8 +6,7 @@ from openpilot.selfdrive.modeld.runners.runmodel_pyx import RunModel  #(TODO add
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from rknnlite.api import RKNNLite
 
-class RKNNModel(RunModel): #(TODO add 2)
-# class RKNNModel():
+class RKNNModel(RunModel):
   def __init__(self, path, output, runtime, use_tf8, cl_context): # runtime and cl_context are not used in this case
     self.inputs = {}
     self.output = output

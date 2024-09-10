@@ -1,9 +1,13 @@
 #pragma once
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-#include "rknn_api.h"
 #include "selfdrive/modeld/runners/runmodel.h"
+#include "common/rkutil.h"
 
+#define RKNN_CHECK(_expr)     \
+  ({                        \
+    assert(_expr == RKNN_SUCC); \
+  })
 
 struct RKNNModelInput : public ModelInput {
   float *rknn_buffer;
