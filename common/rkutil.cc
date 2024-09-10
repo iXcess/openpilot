@@ -412,8 +412,13 @@ int rknn_app_dtype_convert(unsigned char* src_ptr,
 void dump_tensor_attr(rknn_tensor_attr* attr)
 {
   LOGD("index=%d, name=%s, n_dims=%d, dims=[%d, %d, %d, %d, %d], n_elems=%d, size=%d, fmt=%s, type=%s, qnt_type=%s, "
-         "zp=%d, scale=%f\n",
+         "zp=%d, scale=%f\n, passthrough=%d,",
          attr->index, attr->name, attr->n_dims, attr->dims[0], attr->dims[1], attr->dims[2], attr->dims[3], attr->dims[4],
          attr->n_elems, attr->size, get_format_string(attr->fmt), get_type_string(attr->type),
-         get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale);
+         get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale, attr->pass_through);
+}
+
+void print_execution_time(rknn_perf_run* obj)
+{
+  LOGD("rknn model execution time = %ldms", obj->run_duration);
 }

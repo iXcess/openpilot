@@ -29,9 +29,10 @@ private:
   size_t output_size;
   rknn_context ctx;
   rknn_input_output_num io_num;
-  rknn_tensor_attr native_input_attrs[9];
+  //rknn_tensor_attr native_input_attrs[9];
   rknn_tensor_attr input_attrs[9];
   rknn_tensor_attr output_attrs[1];
+  rknn_perf_run perf_run;
   rknn_input rknn_inputs[9]; // TODO: make it dynamically allocated
   rknn_output rknn_outputs[1]; // TODO: make it dynamically allocated
 };

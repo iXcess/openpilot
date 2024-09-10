@@ -41,3 +41,5 @@ int rknn_app_dtype_convert(unsigned char* src_ptr,
 
 void dump_tensor_attr(rknn_tensor_attr* attr);
 
+void print_execution_time(rknn_perf_run* obj);
+

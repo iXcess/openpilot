@@ -98,9 +98,12 @@ class ModelState:
     self.inputs['nav_instructions'][:] = inputs['nav_instructions']
 
     # if getCLBuffer is not None, frame will be None
-    self.model.setInputBuffer("input_imgs", self.frame.prepare(buf, transform.flatten(), self.model.getCLBuffer("input_imgs")))
+    buf_nhwc = self.frame.prepare(buf, transform.flatten(), self.model.getCLBuffer("input_imgs")).reshape(1, 12, 128, 256).transpose(0,2,3,1).flatten()
+    self.model.setInputBuffer("input_imgs", buf_nhwc)
+
     if wbuf is not None:
-      self.model.setInputBuffer("big_input_imgs", self.wide_frame.prepare(wbuf, transform_wide.flatten(), self.model.getCLBuffer("big_input_imgs")))
+      wbuf_nhwc = self.wide_frame.prepare(wbuf, transform_wide.flatten(), self.model.getCLBuffer("big_input_imgs")).reshape(1, 12, 128, 256).transpose(0,2,3,1).flatten()
+      self.model.setInputBuffer("big_input_imgs", wbuf_nhwc)
 
     if prepare_only:
       return None
@@ -225,7 +228,7 @@ def main(demo=False):
     desire = DH.desire
     is_rhd = sm["driverMonitoringState"].isRHD
     position = sm["modelV2"].position
-    print("MODELV2: " + str(position))
+    #print("MODELV2: " + str(position))
     frame_id = sm["roadCameraState"].frameId
     lateral_control_params = np.array([sm["carState"].vEgo, steer_delay], dtype=np.float32)
     if sm.updated["liveCalibration"]:
@@ -297,7 +300,7 @@ def main(demo=False):
       fill_model_msg(modelv2_send, model_output, publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id, frame_drop_ratio,
                       meta_main.timestamp_eof, timestamp_llk, model_execution_time, nav_enabled, live_calib_seen)
 
-      print("RKNN: " + str(modelv2_send.modelV2.position))
+      #print("RKNN: " + str(modelv2_send.modelV2.position))
       desire_state = modelv2_send.modelV2.meta.desireState
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
