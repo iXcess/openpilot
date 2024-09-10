@@ -12,15 +12,6 @@
 #include "common/rkutil.h"
 #include "common/timing.h"
 
-static void dump_tensor_attr(rknn_tensor_attr* attr)
-{
-  LOGD("index=%d, name=%s, n_dims=%d, dims=[%d, %d, %d, %d], n_elems=%d, size=%d, fmt=%s, type=%s, qnt_type=%s, "
-         "zp=%d, scale=%f\n",
-         attr->index, attr->name, attr->n_dims, attr->dims[0], attr->dims[1], attr->dims[2], attr->dims[3],
-         attr->n_elems, attr->size, get_format_string(attr->fmt), get_type_string(attr->type),
-         get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale);
-}
-
 RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size, int runtime, bool _use_tf8, cl_context context) {
   output = _output;
   output_size = _output_size;
@@ -36,8 +27,8 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   // load model
   RKNN_CHECK(rknn_init(&ctx, (void *) modelptr, model_len, 0, NULL));
 
-  // NPU core, supercombo CORE0, dmonitoring CORE1, nav CORE2
-  rknn_set_core_mask(ctx, RKNN_NPU_CORE_0);
+  // TODO: NPU core, supercombo CORE0, dmonitoring CORE1, nav CORE2, does it get speed up?
+  rknn_set_core_mask(ctx, RKNN_NPU_CORE_AUTO);
   // TODO: What is this for? rknn_set_batch_core_num(ctx, 2);
 
   // get sdk and driver version
@@ -49,17 +40,23 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   RKNN_CHECK(rknn_query(ctx, RKNN_QUERY_IN_OUT_NUM, &io_num, sizeof(io_num)));
   LOGD("model input num: %d, output num: %d\n", io_num.n_input, io_num.n_output);
 
+  LOGD("native input tensors: \n");
+  memset(native_input_attrs, 0, io_num.n_input * sizeof(rknn_tensor_attr));
+  for (uint32_t i = 0; i < io_num.n_input; i++) {
+    native_input_attrs[i].index = i;
+    RKNN_CHECK(rknn_query(ctx, RKNN_QUERY_NATIVE_INPUT_ATTR, &(native_input_attrs[i]), sizeof(rknn_tensor_attr)));
+    dump_tensor_attr(&native_input_attrs[i]);
+  }
+
   LOGD("input tensors: \n");
-  rknn_tensor_attr input_attrs[io_num.n_input];
   memset(input_attrs, 0, io_num.n_input * sizeof(rknn_tensor_attr));
   for (uint32_t i = 0; i < io_num.n_input; i++) {
     input_attrs[i].index = i;
-    RKNN_CHECK(rknn_query(ctx, RKNN_QUERY_NATIVE_INPUT_ATTR, &(input_attrs[i]), sizeof(rknn_tensor_attr)));
+    RKNN_CHECK(rknn_query(ctx, RKNN_QUERY_INPUT_ATTR, &(input_attrs[i]), sizeof(rknn_tensor_attr)));
     dump_tensor_attr(&input_attrs[i]);
   }
 
   LOGD("output tensors:\n");
-  rknn_tensor_attr output_attrs[io_num.n_output];
   memset(output_attrs, 0, io_num.n_output * sizeof(rknn_tensor_attr));
   for (uint32_t i = 0; i < io_num.n_output; i++) {
     output_attrs[i].index = i;
@@ -71,10 +68,10 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   memset(rknn_inputs, 0, io_num.n_input * sizeof(rknn_input));
   for (uint32_t i = 0; i < io_num.n_input; i++) {
     rknn_inputs[i].index = i;
-    rknn_inputs[i].pass_through = 1;
-    rknn_inputs[i].type = RKNN_TENSOR_FLOAT16;
+    rknn_inputs[i].pass_through = 0;
+    rknn_inputs[i].type = RKNN_TENSOR_FLOAT32;
     rknn_inputs[i].fmt = input_attrs[i].fmt;
-    rknn_inputs[i].size = input_attrs[i].size;
+    rknn_inputs[i].size = input_attrs[i].size * 2;
     rknn_inputs[i].buf = NULL;
   }
 
@@ -93,9 +90,22 @@ void RKNNModel::addInput(const std::string name, float *buffer, int size) {
 
 void RKNNModel::execute() {
   for (uint32_t i = 0; i < io_num.n_input; i++) {
-    float* data_fp16[inputs[i]->size * 2];
-    rknn_app_dtype_convert((unsigned char *) inputs[i]->buffer, RKNN_TENSOR_FLOAT32, (unsigned char *) data_fp16, RKNN_TENSOR_FLOAT16, inputs[i]->size, 0.0, 0, false);
-    rknn_inputs[i].buf = data_fp16;
+    //float* data_fp16 = (float*)malloc(inputs[i]->size * sizeof(float));
+    //float* data_fp16[inputs[i]->size / 2];
+    //half data_fp16[inputs[i]->size];
+    //rknn_app_dtype_convert((unsigned char *) inputs[i]->buffer, RKNN_TENSOR_FLOAT32, (unsigned char *) data_fp16, RKNN_TENSOR_FLOAT16, inputs[i]->size, 0.0, 0, false);
+    //float_to_half_array(inputs[i]->buffer, data_fp16, inputs[i]->size);
+    //rknn_inputs[i].buf = data_fp16;
+
+    if (false) {
+      //rknn_app_layout_convert((unsigned char *) inputs[i]->buffer, input_attrs, (unsigned char*) new_fmt, native_input_attrs, RKNN_TENSOR_FLOAT32, true);
+      //rknn_app_layout_convert((unsigned char *) data_fp16, input_attrs, (unsigned char*) new_fmt, native_input_attrs, RKNN_TENSOR_FLOAT16, true);
+      //rknn_inputs[i].buf = (unsigned char *) new_fmt;
+    } else {
+      rknn_inputs[i].buf = (unsigned char *) inputs[i]->buffer;
+      //rknn_inputs[i].buf = data_fp16;
+    }
+    //free(data_fp16);
   }
 
   RKNN_CHECK(rknn_inputs_set(ctx, io_num.n_input, rknn_inputs));

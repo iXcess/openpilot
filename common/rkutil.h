@@ -39,4 +39,5 @@ int rknn_app_dtype_convert(unsigned char* src_ptr,
                          rknn_tensor_type dst_dtype,
                          int n_elems, float scale, int zero_point, bool verbose = false);
 
+void dump_tensor_attr(rknn_tensor_attr* attr);
 

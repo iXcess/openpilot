@@ -408,3 +408,12 @@ int rknn_app_dtype_convert(unsigned char* src_ptr,
 
     return convert_success;
 }
+
+void dump_tensor_attr(rknn_tensor_attr* attr)
+{
+  LOGD("index=%d, name=%s, n_dims=%d, dims=[%d, %d, %d, %d, %d], n_elems=%d, size=%d, fmt=%s, type=%s, qnt_type=%s, "
+         "zp=%d, scale=%f\n",
+         attr->index, attr->name, attr->n_dims, attr->dims[0], attr->dims[1], attr->dims[2], attr->dims[3], attr->dims[4],
+         attr->n_elems, attr->size, get_format_string(attr->fmt), get_type_string(attr->type),
+         get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale);
+}
