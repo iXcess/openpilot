@@ -66,6 +66,10 @@ legend = ["LAT_ACCEL_FACTOR", "MAX_LAT_ACCEL_MEASURED", "FRICTION"]
 "LEXUS GS F 2016" = [2.5, 2.5, 0.08]
 "HYUNDAI STARIA 4TH GEN" = [1.8, 2.0, 0.15]
 "PROTON X50" = [2.5, 2.5, 0.1]
+"PERODUA ALZA" = [2.5, 2.5, 0.1]
+"PERODUA ATIVA" = [2.5, 2.5, 0.1]
+"PERODUA MYVI" = [2.5, 2.5, 0.1]
+"TOYOTA VIOS" = [2.5, 2.5, 0.1]
 
 # Dashcam or fallback configured as ideal car
 "mock" = [10.0, 10, 0.0]

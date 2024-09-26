@@ -1,5 +1,4 @@
 from openpilot.common.numpy_fast import clip
-from cereal import car
 
 # reference: http://sunshine2k.de/articles/coding/crc/understanding_crc.html#ch3
 crc8_lut_8h2f = []
@@ -25,7 +24,6 @@ def get_crc8_8h2f(dat):
   return crc ^ 0xFF
 
 def create_can_steer_command(packer, steer, steer_req, wheel_touch_warning, raw_cnt, stock_lks_settings, lks):
-  """Creates a CAN message for the Perodua LKA Steer Command."""
   values = {
     "LKAS_ENGAGED1": steer_req,
     "LKAS_ENGAGED2": steer_req,
@@ -46,7 +44,6 @@ def create_can_steer_command(packer, steer, steer_req, wheel_touch_warning, raw_
   return packer.make_can_msg("ADAS_LKAS", 0, values)
 
 def create_hud(packer, steer, steer_req, ldw, rlane, llane):
-  """Creates a CAN message for the Perodua LKA Steer Command."""
   steer_dir = steer >= 0
   values = {
     "LANE_DEPARTURE_WARNING_RIGHT": ldw and not steer_dir,
@@ -61,11 +58,9 @@ def create_hud(packer, steer, steer_req, ldw, rlane, llane):
     "RLANE_CHAR": 0xaa if steer_req else 0x3d,
   }
 
-  dat = packer.make_can_msg("LKAS", 0, values)[2]
   return packer.make_can_msg("LKAS", 0, values)
 
 def create_lead_detect(packer, is_lead, steer_req):
-  """Creates a CAN message for the Perodua LKA Steer Command."""
   values = {
     "LEAD_DISTANCE": 30,
     "NEW_SIGNAL_1": 0x7f,
@@ -75,11 +70,9 @@ def create_lead_detect(packer, is_lead, steer_req):
     "LEAD_TOO_NEAR": 0,
   }
 
-  dat = packer.make_can_msg("ADAS_LEAD_DETECT", 0, values)[2]
   return packer.make_can_msg("ADAS_LEAD_DETECT", 0, values)
 
 def create_pcm(packer, steer, steer_req, raw_cnt):
-
   values = {
     "ACC_SET_SPEED": 0x23 if steer_req else 0,
     "SET_DISTANCE": 1 if steer_req else 0,
