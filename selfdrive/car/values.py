@@ -12,10 +12,11 @@ from openpilot.selfdrive.car.tesla.values import CAR as TESLA
 from openpilot.selfdrive.car.toyota.values import CAR as TOYOTA
 #from openpilot.selfdrive.car.volkswagen.values import CAR as VOLKSWAGEN
 from openpilot.selfdrive.car.proton.values import CAR as PROTON
+from openpilot.selfdrive.car.dnga.values import CAR as DNGA
 
-Platform = BODY | TESLA | TOYOTA | PROTON
-#Platform = BODY | CHRYSLER | FORD | GM | HONDA | HYUNDAI | MAZDA | NISSAN | SUBARU | TESLA | TOYOTA | VOLKSWAGEN | PROTON
-BRANDS = [BODY, TESLA, TOYOTA, PROTON]
-#BRANDS = [BODY, CHRYSLER, FORD, GM, HONDA, HYUNDAI, MAZDA, NISSAN, SUBARU, TESLA, TOYOTA, VOLKSWAGEN, PROTON]
+Platform = BODY | TESLA | TOYOTA | PROTON | DNGA
+#Platform = BODY | CHRYSLER | FORD | GM | HONDA | HYUNDAI | MAZDA | NISSAN | SUBARU | TESLA | TOYOTA | VOLKSWAGEN | PROTON | DNGA
+BRANDS = [BODY, TESLA, TOYOTA, PROTON, DNGA]
+#BRANDS = [BODY, CHRYSLER, FORD, GM, HONDA, HYUNDAI, MAZDA, NISSAN, SUBARU, TESLA, TOYOTA, VOLKSWAGEN, PROTON, DNGA]
 
 PLATFORMS: dict[str, Platform] = {str(platform): platform for brand in BRANDS for platform in cast(list[Platform], brand)}
