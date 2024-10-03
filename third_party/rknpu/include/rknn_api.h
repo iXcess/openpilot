@@ -74,17 +74,17 @@ extern "C" {
 /* default nice -19, this flag can disable default priority */
 #define RKNN_FLAG_DISABLE_PROC_HIGH_PRIORITY    0x00002000
 
-/* don't flush input buffer cache, the user must ensure that the input tensor has flushed the cache before calling rknn_run.
+/* don't flush input buffer cache, the user must ensure that the input tensor has flushed the cache before calling rknn_run. 
 !!! Don't use this flags when you call rknn_inputs_set() to set input data. */
 #define RKNN_FLAG_DISABLE_FLUSH_INPUT_MEM_CACHE    0x00004000
 
-/* Don't invalid output buffer cache.
-   Users cannot directly access output_mem->virt_addr,
-   which will cause cache consistency problems.
-   If you want to use output_mem->virt_addr,
-   you must use rknn_mem_sync (ctx, mem, RKNN_MEMORY_SYNC_FROM_DEVICE) to flush the cache.
-   This flags is generally used when the output data of the NPU is not accessed by the CPU,
-   but is accessed by the GPU or RGA to reduce the time required to flush the cache.
+/* Don't invalid output buffer cache. 
+   Users cannot directly access output_mem->virt_addr, 
+   which will cause cache consistency problems. 
+   If you want to use output_mem->virt_addr, 
+   you must use rknn_mem_sync (ctx, mem, RKNN_MEMORY_SYNC_FROM_DEVICE) to flush the cache. 
+   This flags is generally used when the output data of the NPU is not accessed by the CPU, 
+   but is accessed by the GPU or RGA to reduce the time required to flush the cache. 
    !!! Don't use this flags when you call rknn_outputs_get() to get output data.*/
 #define RKNN_FLAG_DISABLE_FLUSH_OUTPUT_MEM_CACHE   0x00008000
 
@@ -562,7 +562,7 @@ int rknn_set_batch_core_num(rknn_context context, int core_num);
     RKNN_NPU_CORE_2: core 2 mode
     RKNN_NPU_CORE_0_1: combine core 0/1 mode
     RKNN_NPU_CORE_0_1_2: combine core 0/1/2 mode
-    RKNN_NPU_CORE_ALL: auto mode, select multiple npu cores to run depending on platform
+    RKNN_NPU_CORE_ALL: auto mode, select multiple npu cores to run depending on platform 
 
 
     input:
