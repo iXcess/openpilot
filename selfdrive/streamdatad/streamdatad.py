@@ -3,16 +3,24 @@
 # import sys
 import socket
 import time
+import fcntl
+import struct
+import os
 
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 
 def get_wlan_ip():
-  # Connect to an external server (e.g., Google's public DNS server)
-  with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-    # It doesn't actually send any data
-    s.connect(("8.8.8.8", 80))
-    return s.getsockname()[0]  # Return the local IP address
+    for iface in os.listdir('/sys/class/net/'):
+        if iface.startswith('wl'):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                ip = socket.inet_ntoa(fcntl.ioctl(
+                    s.fileno(), 0x8915, struct.pack('256s', bytes(iface[:15], 'utf-8'))
+                )[20:24])
+                return ip
+            except IOError:
+                pass
 
 class Streamer:
   def __init__(self, client_ip, sm=None):
