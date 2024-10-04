@@ -46,24 +46,27 @@ class Streamer:
   def update_and_publish(self):
     if self.is_connected():
       self.sm.update()
-
       self.sock.sendto(self.sm['navInstruction'].as_builder().to_bytes(), (self.ip, self.port))
+
+  def send_udp_message(self, message):
+      if self.is_connected():
+            self.sock.sendto(message.encode('utf-8'), (self.ip, self.port))
 
   def streamd_thread(self):
     while True:
       self.rk.monitor_time()
       self.update_and_publish()
+      self.send_udp_message("Hello, this is a periodic UDP message from KA2")
       self.rk.keep_time()
 
 def main():
   #streamer = Streamer(sys.argv[1])
-  client_ip = "192.168.1.100"
+  client_ip = "192.168.100.24"
   streamer = Streamer(client_ip)
 
   # check for hotspot on, then setup the udp endpoint
   streamer.setup_udp_endpoint()
   streamer.streamd_thread()
-
 
 if __name__ == "__main__":
   main()
