@@ -1,5 +1,4 @@
 import socket
-import time
 import fcntl
 import struct
 import os
@@ -7,7 +6,9 @@ import os
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 
-BUFFER_SIZE = 1024  # Constant for the buffer size
+BUFFER_SIZE = 1024
+UDP_PORT = 5006
+TCP_PORT = 5007
 
 def get_wlan_ip():
   for iface in os.listdir('/sys/class/net/'):
@@ -22,123 +23,81 @@ def get_wlan_ip():
         pass
 
 class Streamer:
-  def __init__(self, client_ip, sm=None):
+  def __init__(self, sm=None):
     self.local_ip = get_wlan_ip()
-    self.ip = client_ip
-    self.udp_port = 5006
-    self.tcp_port = 5007
-    self.udp_sock = None
-    self.tcp_sock = None
+    self.ip = None
+    self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
-
-    # Setup message subscriber
     self.sm = sm if sm else messaging.SubMaster(['navInstruction'])
-    self.rk = Ratekeeper(10, print_delay_threshold=None)
+    self.rk = Ratekeeper(10)
 
-  def setup_udp_endpoint(self):
-    try:
-      self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-      self.udp_sock.bind((self.local_ip, self.udp_port))
-      self.udp_sock.setblocking(False)  # Set to non-blocking mode
-    except socket.error as e:
-      self.udp_sock = None
-      print(f"Failed to set up UDP endpoint: {e}")  # Log the error for debugging
+    self.setup_sockets()
 
-  def setup_tcp_endpoint(self):
-    try:
-      self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-      self.tcp_sock.bind((self.local_ip, self.tcp_port))
-      self.tcp_sock.listen(1)
-      self.tcp_sock.setblocking(False)  # Set to non-blocking mode
-    except socket.error as e:
-      self.tcp_sock = None
-      print(f"Failed to set up TCP endpoint: {e}")  # Log the error for debugging
+  def setup_sockets(self):
+    self.udp_sock.bind((self.local_ip, UDP_PORT))
+    self.udp_sock.setblocking(False)
+    self.tcp_sock.bind((self.local_ip, TCP_PORT))
+    self.tcp_sock.listen(1)
+    self.tcp_sock.setblocking(False)
 
-  def is_udp_connected(self):
-    return self.udp_sock is not None
-
-  def is_tcp_connected(self):
-    return self.tcp_conn is not None
-
-  def update_and_publish(self):
-    if self.is_udp_connected():
+  def send_udp_message(self):
+    if self.ip:
       self.sm.update()  # Update the message
-      message = "Hello, this is a periodic UDP message from KA2"  # Fixed message to send
-      self.udp_sock.sendto(message.encode('utf-8'), (self.ip, self.udp_port))
+      # message = self.sm['navInstruction'].as_builder().to_bytes()  # Original message retrieval
+      message = "Hello, this is a periodic UDP message from KA2"
+      self.udp_sock.sendto(message.encode('utf-8'), (self.ip, UDP_PORT))
 
-  def send_tcp_message(self, message):
-    if self.is_tcp_connected():
-      if message:  # Only send if the message is not empty
-        try:
-          self.tcp_conn.sendall(message.encode('utf-8'))
-        except socket.error:
-          self.tcp_conn = None
-        except Exception:
-          pass  # Handle unexpected errors silently
+  def send_tcp_message(self):
+    if self.tcp_conn:
+      try:
+        self.tcp_conn.sendall("Hello, this is a periodic TCP message from KA2".encode('utf-8'))
+      except socket.error:
+        self.tcp_conn = None  # Reset connection on error
 
   def accept_new_connection(self):
-    if self.tcp_conn is None:
-      if self.tcp_sock is not None:  # Check if tcp_sock is valid
-        try:
-          self.tcp_conn, _ = self.tcp_sock.accept()
-        except socket.error:
-          pass  # Handle the error without breaking the flow
-      else:
-        print("TCP socket is not initialized, cannot accept new connection.")
+    if not self.tcp_conn:
+      try:
+        self.tcp_conn, addr = self.tcp_sock.accept()
+        self.ip = addr[0]  # Update client IP for UDP messages
+      except socket.error:
+        pass
 
   def receive_udp_message(self):
     try:
-      message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)  # Use the constant buffer size
+      message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)
       print(f"Received UDP message from {addr}: {message.decode('utf-8')}")
-      return True
+      self.ip = addr[0]  # Update client IP
     except socket.error:
-      return False
+      pass
 
   def receive_tcp_message(self):
-    if self.tcp_conn is not None:
+    if self.tcp_conn:
       try:
-        message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)  # Non-blocking receive
+        message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
         if message:
-          addr = self.tcp_conn.getpeername()  # Get the IP and port of the connected socket
+          addr = self.tcp_conn.getpeername()
           print(f"Received TCP message from {addr}: {message.decode('utf-8')}")
-          return True
       except socket.error:
-        pass  # Non-blocking mode will raise an error if no message is available
-    return False
+        pass
 
   def streamd_thread(self):
     while True:
       self.rk.monitor_time()
-
-      # Always attempt to send a UDP message
-      self.update_and_publish()
-
-      # Accept new TCP connections
+      self.send_udp_message()
       self.accept_new_connection()
-
-      # Send TCP messages periodically
-      self.send_tcp_message("Hello, this is a periodic TCP message from KA2")
-
-      # Receive messages without blocking
+      self.send_tcp_message()
       self.receive_udp_message()
       self.receive_tcp_message()
-
       self.rk.keep_time()
-      time.sleep(0.0001)  # Prevent tight looping
 
   def close_connections(self):
     if self.tcp_conn:
       self.tcp_conn.close()
-    if self.udp_sock:
-      self.udp_sock.close()
+    self.udp_sock.close()
 
 def main():
-  client_ip = "192.168.100.22"
-  streamer = Streamer(client_ip)
-
-  # Setup the UDP and TCP endpoints
-  streamer.setup_udp_endpoint()
-  streamer.setup_tcp_endpoint()
+  streamer = Streamer()
   streamer.streamd_thread()
 
 if __name__ == "__main__":
