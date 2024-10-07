@@ -30,7 +30,7 @@ class Streamer:
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
     self.sm = sm if sm else messaging.SubMaster(['navInstruction'])
-    self.rk = Ratekeeper(10)
+    self.rk = Ratekeeper(10) # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
 
@@ -43,10 +43,9 @@ class Streamer:
 
   def send_udp_message(self):
     if self.ip:
-      self.sm.update()  # Update the message
-      # message = self.sm['navInstruction'].as_builder().to_bytes()  # Original message retrieval
-      message = "Hello, this is a periodic UDP message from KA2"
-      self.udp_sock.sendto(message.encode('utf-8'), (self.ip, UDP_PORT))
+      self.sm.update()
+      message = self.sm['navInstruction'].as_builder().to_bytes()
+      self.udp_sock.sendto(message, (self.ip, UDP_PORT))
 
   def send_tcp_message(self):
     if self.tcp_conn:
