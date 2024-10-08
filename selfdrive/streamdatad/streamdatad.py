@@ -29,8 +29,8 @@ class Streamer:
     self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
-    self.sm = sm if sm else messaging.SubMaster(['navInstruction'])
-    self.rk = Ratekeeper(10) # Ratekeeper for 10 Hz loop
+    self.sm = sm if sm else messaging.SubMaster(['navInstruction', 'settings'])
+    self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
 
@@ -50,7 +50,10 @@ class Streamer:
   def send_tcp_message(self):
     if self.tcp_conn:
       try:
-        self.tcp_conn.sendall("Hello, this is a periodic TCP message from KA2".encode('utf-8'))
+        settings_builder = self.sm['settings'].as_builder()
+        settings_builder.key = "dummy_key"
+        settings_builder.value = "dummy_value"
+        self.tcp_conn.sendall(settings_builder.to_bytes())
       except socket.error:
         self.tcp_conn = None  # Reset connection on error
 
@@ -75,8 +78,9 @@ class Streamer:
       try:
         message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
         if message:
-          addr = self.tcp_conn.getpeername()
-          print(f"Received TCP message from {addr}: {message.decode('utf-8')}")
+          # Deserialize the message using the Settings struct
+          settings = messaging.settings.from_bytes(message)
+          print(f"Received settings: {settings.key.decode('utf-8')} = {settings.value.decode('utf-8')}")
       except socket.error:
         pass
 
