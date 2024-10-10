@@ -1,14 +1,15 @@
 from openpilot.common.numpy_fast import clip
+from typing import List
 
 # reference: http://sunshine2k.de/articles/coding/crc/understanding_crc.html#ch3
-crc8_lut_8h2f = []
+crc8_lut_8h2f: List[int] = []
 
 def init_lut_crc8_8h2f():
   poly = 0x2F
 
   for i in range(256):
     crc = i
-    for j in range(8):
+    for _ in range(8):
       if ((crc & 0x80) != 0):
         crc = ((crc << 1) ^ poly) & 0xFF
       else:
@@ -26,7 +27,7 @@ def get_crc8_8h2f(dat):
 def create_can_steer_command(packer, steer, steer_req, wheel_touch_warning, raw_cnt, stock_lks_settings, lks):
   values = {
     "LKAS_ENGAGED1": steer_req,
-    "LKAS_ENGAGED2": steer_req,
+    "LKAS_LINE_ACTIVE": steer_req,
     "STEER_CMD": abs(steer) if steer_req else 0,
     "STEER_DIR": 1 if steer <= 0 else 0,
     "COUNTER": raw_cnt,
