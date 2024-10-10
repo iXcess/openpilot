@@ -1,11 +1,11 @@
 from cereal import car
-from collections import deque
+#from collections import deque
 from opendbc.can.parser import CANParser
 from opendbc.can.can_define import CANDefine
 from openpilot.common.numpy_fast import mean
 from openpilot.common.conversions import Conversions as CV
 from openpilot.selfdrive.car.interfaces import CarStateBase
-from openpilot.selfdrive.car.proton.values import DBC, CAR, HUD_MULTIPLIER, CANBUS
+from openpilot.selfdrive.car.proton.values import DBC, HUD_MULTIPLIER, CANBUS
 
 class CarState(CarStateBase):
   def __init__(self, CP):
@@ -34,7 +34,8 @@ class CarState(CarStateBase):
     self.stock_lks_settings2 = cp.vl["ADAS_LKAS"]["SET_ME_1_1"]
     self.steer_dir = cp.vl["ADAS_LKAS"]["STEER_DIR"]
     self.stock_ldp = bool(cp.vl["LKAS"]["LANE_DEPARTURE_WARNING_RIGHT"]) or bool(cp.vl["LKAS"]["LANE_DEPARTURE_WARNING_LEFT"])
-    self.lkaDisabled = not bool(cp.vl["ADAS_LKAS"]["LKS_ENABLE"])
+    # If cruise mode is ICC, make bukapilot control steering so it won't disengage.
+    ret.lkaDisabled = not (bool(cp.vl["ADAS_LKAS"]["LKS_ENABLE"]) or self.is_icc_on)
 
     ret.wheelSpeeds = self.get_wheel_speeds(
       cp.vl["WHEEL_SPEED"]['WHEELSPEED_F'],
@@ -91,7 +92,7 @@ class CarState(CarStateBase):
     self.acc_req = bool(cp.vl["ACC_CMD"]["ACC_REQ"])
     ret.cruiseState.available = any([cp.vl["PCM_BUTTONS"]["ACC_ON_OFF_BUTTON"], cp.vl["PCM_BUTTONS"]["GAS_OVERRIDE"]])
 
-    distance_val = int(cp.vl["PCM_BUTTONS"]['SET_DISTANCE'])
+    #distance_val = int(cp.vl["PCM_BUTTONS"]['SET_DISTANCE'])
     # TODO: ret.cruiseState.setDistance = self.parse_set_distance(self.set_distance_values.get(distance_val, None))
 
     # engage and disengage logic
@@ -128,9 +129,6 @@ class CarState(CarStateBase):
       # used for lane change so its okay for the chime to work on both side.
       ret.leftBlindspot = bool(cp.vl["BSM_ADAS"]["LEFT_APPROACH"]) or bool(cp.vl["BSM_ADAS"]["LEFT_APPROACH_WARNING"])
       ret.rightBlindspot = bool(cp.vl["BSM_ADAS"]["RIGHT_APPROACH"]) or bool(cp.vl["BSM_ADAS"]["RIGHT_APPROACH_WARNING"])
-
-    # to delete
-    ret.cruiseState.speedOffset = cp.vl["ADAS_LEAD_DETECT"]['LEAD_DISTANCE']
 
     return ret
 
