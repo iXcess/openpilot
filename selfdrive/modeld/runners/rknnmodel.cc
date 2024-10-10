@@ -28,7 +28,12 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   RKNN_CHECK(rknn_init(&ctx, (void *) modelptr, model_len, 0, NULL));
 
   // TODO: NPU core, supercombo CORE0, dmonitoring CORE1, nav CORE2, does it get speed up?
-  rknn_set_core_mask(ctx, RKNN_NPU_CORE_0_1_2);
+  if (runtime == 1) {
+    rknn_set_core_mask(ctx, RKNN_NPU_CORE_0_1);
+  }
+  else {
+    rknn_set_core_mask(ctx, RKNN_NPU_CORE_2);
+  }
 
   // get sdk and driver version
   rknn_sdk_version sdk_ver;
