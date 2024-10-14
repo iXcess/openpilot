@@ -125,8 +125,13 @@ class Streamer:
   def receive_udp_message(self):
     try:
       message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)
-      print(f"Received UDP message from {addr}: {message.decode('utf-8')}")
       self.ip = addr[0]  # Update client IP
+
+      try:
+        nav_instruction = messaging.navInstruction.from_bytes(message)
+        print(f"Deserialized UDP navInstruction: {nav_instruction.key.decode('utf-8')} = {nav_instruction.value.decode('utf-8')}")
+      except Exception:
+        print(f"Schema error. Raw UDP: {message.decode('utf-8')}")
     except socket.error:
       pass
 
@@ -135,9 +140,12 @@ class Streamer:
       try:
         message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
         if message:
-          # Deserialize the message using the Settings struct
-          settings = messaging.settings.from_bytes(message)
-          print(f"Received settings: {settings.key.decode('utf-8')} = {settings.value.decode('utf-8')}")
+          try:
+            # Deserialize the message using the Settings struct
+            settings = messaging.settings.from_bytes(message)
+            print(f"Received settings: {settings.key.decode('utf-8')} = {settings.value.decode('utf-8')}")
+          except Exception:
+            print(f"Schema error. Raw TCP: {message.decode('utf-8')}")
       except socket.error:
         pass
 
