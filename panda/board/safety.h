@@ -18,6 +18,7 @@
 #include "safety/safety_volkswagen_pq.h"
 #include "safety/safety_elm327.h"
 #include "safety/safety_body.h"
+#include "safety/safety_dnga.h"
 
 // CAN-FD only safety modes
 #ifdef CANFD
@@ -51,6 +52,8 @@
 #define SAFETY_FAW 26U
 #define SAFETY_BODY 27U
 #define SAFETY_HYUNDAI_CANFD 28U
+#define SAFETY_PROTON 31U
+#define SAFERT_DNGA 32U
 
 uint16_t current_safety_mode = SAFETY_SILENT;
 uint16_t current_safety_param = 0;
