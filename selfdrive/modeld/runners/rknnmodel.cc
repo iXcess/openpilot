@@ -17,34 +17,41 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   output_size = _output_size;
   ctx = 0;
 
-  std::string model_data;
-  model_data = util::read_file(path);
-  std::vector<unsigned char> buffer(model_data.begin(), model_data.end());
-  unsigned char* modelptr = buffer.data();
-  size_t model_len = buffer.size();
+  std::string model_data = util::read_file(path);
+  size_t model_len = model_data.size();
   assert(model_len > 0);
 
-  // load model
-  RKNN_CHECK(rknn_init(&ctx, (void *) modelptr, model_len, 0, NULL));
+  // Create memory for the model with zero-copy
+  model_mem = rknn_create_mem2(ctx, model_len, RKNN_MEM_FLAG_ALLOC_NO_CONTEXT);
+  memcpy(model_mem->virt_addr, model_data.c_str(), model_len);
+
+  // Initialize the model using the zero-copy API
+  rknn_init_extend init_ext;
+  memset(&init_ext, 0, sizeof(rknn_init_extend));
+  init_ext.real_model_offset = 0;
+  init_ext.real_model_size = model_len;
+  init_ext.model_buffer_fd = model_mem->fd;
+  init_ext.model_buffer_flags = model_mem->flags;
+
+  RKNN_CHECK(rknn_init(&ctx, model_mem->virt_addr, model_len, RKNN_FLAG_MODEL_BUFFER_ZERO_COPY, &init_ext));
 
   // TODO: NPU core, supercombo CORE0, dmonitoring CORE1, nav CORE2, does it get speed up?
   if (runtime == 1) {
     rknn_set_core_mask(ctx, RKNN_NPU_CORE_0_1);
-  }
-  else {
+  } else {
     rknn_set_core_mask(ctx, RKNN_NPU_CORE_2);
   }
 
-  // get sdk and driver version
+  // Get SDK and driver version
   rknn_sdk_version sdk_ver;
   RKNN_CHECK(rknn_query(ctx, RKNN_QUERY_SDK_VERSION, &sdk_ver, sizeof(sdk_ver)));
   LOGD("rknnrt version: %s, driver version: %s\n", sdk_ver.api_version, sdk_ver.drv_version);
 
-  // get model input output info
+  // Get model input/output info
   RKNN_CHECK(rknn_query(ctx, RKNN_QUERY_IN_OUT_NUM, &io_num, sizeof(io_num)));
   LOGD("model input num: %d, output num: %d\n", io_num.n_input, io_num.n_output);
 
-  LOGD("input tensors: \n");
+  LOGD("input tensors:\n");
   memset(input_attrs, 0, io_num.n_input * sizeof(rknn_tensor_attr));
   for (uint32_t i = 0; i < io_num.n_input; i++) {
     input_attrs[i].index = i;
@@ -60,18 +67,18 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
     dump_tensor_attr(&output_attrs[i]);
   }
 
-  // initialise inputs
+  // Initialise inputs
   memset(rknn_inputs, 0, io_num.n_input * sizeof(rknn_input));
   for (uint32_t i = 0; i < io_num.n_input; i++) {
     rknn_inputs[i].index = i;
     rknn_inputs[i].pass_through = 0;
     rknn_inputs[i].type = RKNN_TENSOR_FLOAT32;
     rknn_inputs[i].fmt = input_attrs[i].fmt;
-    rknn_inputs[i].size = input_attrs[i].size * 2;
-    rknn_inputs[i].buf = NULL;
+    rknn_inputs[i].size = input_attrs[i].size * 2;  // Adjust if necessary
+    rknn_inputs[i].buf = nullptr;  // Will be set later
   }
 
-  // initialises output
+  // Initialise outputs
   memset(rknn_outputs, 0, io_num.n_output * sizeof(rknn_output));
   for (uint32_t i = 0; i < io_num.n_output; ++i) {
     rknn_outputs[i].want_float  = 1;    // Convert to FP32
@@ -80,18 +87,17 @@ RKNNModel::RKNNModel(const std::string path, float *_output, size_t _output_size
   }
 }
 
+RKNNModel::~RKNNModel() {
+  rknn_destroy_mem(ctx, model_mem); // Free the memory allocated for the model
+  rknn_destroy(ctx); // Destroy the RKNN context
+}
+
 void RKNNModel::addInput(const std::string name, float *buffer, int size) {
   inputs.push_back(std::unique_ptr<RKNNModelInput>(new RKNNModelInput(name, buffer, size, nullptr)));
 }
 
 void RKNNModel::execute() {
   for (uint32_t i = 0; i < io_num.n_input; i++) {
-    //float* data_fp16[inputs[i]->size / 2];
-    //half data_fp16[inputs[i]->size];
-    //rknn_app_dtype_convert((unsigned char *) inputs[i]->buffer, RKNN_TENSOR_FLOAT32, (unsigned char *) data_fp16, RKNN_TENSOR_FLOAT16, inputs[i]->size, 0.0, 0, false);
-    //float_to_half_array(inputs[i]->buffer, data_fp16, inputs[i]->size);
-    //rknn_inputs[i].buf = data_fp16;
-
     rknn_inputs[i].buf = (unsigned char *) inputs[i]->buffer;
   }
 
