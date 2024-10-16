@@ -77,28 +77,29 @@ class Streamer:
         sett.remainingDataUpload = self.remainingDataUpload()
         # TODO send uploadStatus in selfdrive/loggerd/uploader.py
         sett.gitCommit = get_commit()
-        # TODO include bukapilot params.cc
-        # sett.updateStatus = params.get("UpdateStatus")
+        # TODO include bukapilot changes in selfdrive/updated.py
+        sett.updateStatus = params.get("UpdaterState") or ''
 
         settings_open = True
         if settings_open:
           sett.enableBukapilot = params.get_bool("OpenpilotEnabledToggle")
-          # sett.quietMode = params.get_bool("QuietMode")
-          # sett.enableAssistedLaneChange = params.get_bool("IsAlcEnabled")
+          sett.quietMode = params.get_bool("QuietMode")
+          sett.enableAssistedLaneChange = params.get_bool("IsAlcEnabled")
           sett.enableLaneDepartureWarning = params.get_bool("IsLdwEnabled")
-          # sett.uploadVideoWiFiOnly = params.get_bool("LogVideoWifiOnly")
+          sett.uploadVideoWiFiOnly = params.get_bool("LogVideoWifiOnly")
           sett.apn = params.get("GsmApn") or ''
           sett.enableRoaming = params.get_bool("GsmRoaming")
           sett.driverPersonality = params.get("LongitudinalPersonality")
           sett.useMetricSystem = params.get_bool("IsMetric")
           sett.enableSSH = params.get_bool("SshEnabled")
           sett.experimentalModel = params.get_bool("ExperimentalMode")
-          # sett.stopDistanceOffset = params.get("StoppingDistanceOffset")
-          # sett.pathSkewOffset = params.get("DrivePathOffset")
-          # sett.devicePowerOffTime = params.get("PowerSaverEntryDuration")
-          # TODO: sett.changeBranchStatus =
-          # sett.featurePackage = params.get("FeaturesPackage")
-          # sett.fixFingerprint = params.get("FixFingerprint")
+          sett.stopDistanceOffset = params.get("StoppingDistanceOffset") or 0
+          sett.pathSkewOffset = params.get("DrivePathOffset") or 0
+          sett.devicePowerOffTime = params.get("PowerSaverEntryDuration") or 0
+          # TODO add code for change branch
+          sett.changeBranchStatus = params.get("ChangeBranchStatus") or ''
+          sett.featurePackage = params.get("FeaturesPackage") or ''
+          sett.fixFingerprint = params.get("FixFingerprint") or ''
 
         request_info = True
         if request_info:

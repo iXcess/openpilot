@@ -3,19 +3,19 @@ import numpy as np
 import time
 import wave
 
-
 from cereal import car, messaging
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.retry import retry
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.params import Params
 
 from openpilot.system import micd
 
 SAMPLE_RATE = 48000
 SAMPLE_BUFFER = 4096 # (approx 100ms)
-MAX_VOLUME = 1.0
+MAX_VOLUME = 0.4 if Params().get_bool("QuietMode") else 1.0
 MIN_VOLUME = 0.1
 CONTROLS_TIMEOUT = 5 # 5 seconds
 FILTER_DT = 1. / (micd.SAMPLE_RATE / micd.FFT_SAMPLES)
@@ -105,10 +105,24 @@ class Soundd:
     data_out[:frames, 0] = self.get_sound_data(frames)
 
   def update_alert(self, new_alert):
-    current_alert_played_once = self.current_alert == AudibleAlert.none or self.current_sound_frame > len(self.loaded_sounds[self.current_alert])
-    if self.current_alert != new_alert and (new_alert != AudibleAlert.none or current_alert_played_once):
-      self.current_alert = new_alert
-      self.current_sound_frame = 0
+    # Determine if the alert is allowed based on QuietMode
+    allowed_alerts = new_alert != AudibleAlert.none
+
+    if Params().get_bool("QuietMode"):
+      allowed_alerts = (new_alert in [
+        AudibleAlert.promptRepeat,
+        AudibleAlert.promptDistracted,
+        AudibleAlert.prompt,
+        AudibleAlert.warningSoft,
+        AudibleAlert.warningImmediate
+      ])
+
+    if allowed_alerts:
+      current_alert_played_once = (self.current_alert == AudibleAlert.none or
+                                    self.current_sound_frame > len(self.loaded_sounds[self.current_alert]))
+      if self.current_alert != new_alert and (new_alert != AudibleAlert.none or current_alert_played_once):
+        self.current_alert = new_alert
+        self.current_sound_frame = 0
 
   def get_audible_alert(self, sm):
     if sm.updated['controlsState']:
