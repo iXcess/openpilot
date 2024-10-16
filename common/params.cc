@@ -208,6 +208,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"UpdaterLastFetchTime", PERSISTENT},
     {"Version", PERSISTENT},
     {"VisionRadarToggle", PERSISTENT},
+    {"QuietMode", PERSISTENT},
 };
 
 } // namespace

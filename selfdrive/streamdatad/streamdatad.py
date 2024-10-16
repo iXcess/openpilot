@@ -83,7 +83,7 @@ class Streamer:
         settings_open = True
         if settings_open:
           sett.enableBukapilot = params.get_bool("OpenpilotEnabledToggle")
-          # sett.quietMode = params.get_bool("QuietMode")
+          sett.quietMode = params.get_bool("QuietMode")
           # sett.enableAssistedLaneChange = params.get_bool("IsAlcEnabled")
           sett.enableLaneDepartureWarning = params.get_bool("IsLdwEnabled")
           # sett.uploadVideoWiFiOnly = params.get_bool("LogVideoWifiOnly")
