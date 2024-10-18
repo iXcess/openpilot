@@ -1,3 +1,15 @@
+// CAN messages
+#define BYD_STEERING_TORQUE       0x1FC
+#define BYD_PEDAL                 0x342
+#define BYD_STEER_MODULE_2        0x11F
+#define BYD_PCM_BUTTONS           0x3B0
+#define BYD_PEDAL_PRESSED         0x220
+#define BYD_DRIVE_STATE           0x242
+#define BYD_STEERING_MODULE_ADAS  0x1E2
+#define BYD_ACC_HUD_ADAS          0x32D
+#define BYD_LKAS_HUD_ADAS         0x316
+#define BYD_ACC_CMD               0x32E
+
 const CanMsg BYD_TX_MSGS[] = {{0x250, 0, 8}, {0x250, 0, 6}, {0x251, 0, 5},  // byd
                                {0x350, 0, 8}, {0x350, 0, 6}, {0x351, 0, 5},  // knee
                                {0x1, 0, 8}}; // CAN flasher

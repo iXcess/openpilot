@@ -1,3 +1,15 @@
+// CAN messages
+#define PROTON_GAS_SENSOR       0x201
+#define PROTON_STEERING_TORQUE  0x150
+#define PROTON_BRAKE            0x123
+#define PROTON_ENGINE           0x082
+#define PROTON_GAS_PEDAL        0x084
+#define PROTON_PCM_BUTTONS      0x1A3
+#define PROTON_GAS_COMMAND      0x200
+#define PROTON_TORQUE_COMMAND   0x202
+#define PROTON_ACC_CMD          0x1A1
+#define PROTON_ADAS_LKAS        0x1B0
+
 const CanMsg PROTON_TX_MSGS[] = {{0x250, 0, 8}, {0x250, 0, 6}, {0x251, 0, 5},  // proton
                                {0x350, 0, 8}, {0x350, 0, 6}, {0x351, 0, 5},  // knee
                                {0x1, 0, 8}}; // CAN flasher
