@@ -1,10 +1,7 @@
 from dataclasses import dataclass, field
-from collections import defaultdict
-
 from cereal import car
-from openpilot.selfdrive.car import AngleRateLimit, CarSpecs, DbcDict, PlatformConfig, Platforms, dbc_dict
+from openpilot.selfdrive.car import CarSpecs, DbcDict, PlatformConfig, Platforms, dbc_dict
 from openpilot.selfdrive.car.docs_definitions import CarInfo
-from openpilot.selfdrive.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
 
 # Todo
 HUD_MULTIPLIER = 1.035

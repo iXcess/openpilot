@@ -1,5 +1,4 @@
 from opendbc.can.packer import CANPacker
-
 from openpilot.selfdrive.car import make_can_msg
 from openpilot.selfdrive.car.interfaces import CarControllerBase
 from openpilot.selfdrive.car.dnga.dngacan import create_can_steer_command, dnga_create_accel_command, \
@@ -7,7 +6,6 @@ from openpilot.selfdrive.car.dnga.dngacan import create_can_steer_command, dnga_
 from openpilot.selfdrive.car.dnga.values import CAR, DBC, BRAKE_SCALE, SNG_CAR
 from openpilot.common.numpy_fast import clip, interp
 from openpilot.common.realtime import DT_CTRL
-
 from bisect import bisect_left
 
 BRAKE_THRESHOLD = 0.01
@@ -209,7 +207,9 @@ class CarController(CarControllerBase):
       # Let stock AEB kick in only when system not engaged
       aeb = not enabled and CS.aebV
       can_sends.append(dnga_create_brake_command(self.packer, enabled, brake_req, pump, apply_brake, aeb, (self.frame/5) % 8))
-      can_sends.append(dnga_create_hud(self.packer, CS.out.cruiseState.available and CS.lkas_latch, enabled, llane_visible, rlane_visible, self.stockLdw, CS.out.stockFcw, CS.out.stockAeb, CS.frontDepartWarning, CS.stock_lkc_off, CS.stock_fcw_off))
+      can_sends.append(dnga_create_hud(self.packer, CS.out.cruiseState.available and CS.lkas_latch, \
+      enabled, llane_visible, rlane_visible, self.stockLdw, CS.out.stockFcw, CS.out.stockAeb, \
+      CS.frontDepartWarning, CS.stock_lkc_off, CS.stock_fcw_off))
 
 
     self.last_steer = apply_steer

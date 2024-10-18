@@ -1,5 +1,4 @@
 from cereal import car
-#from collections import deque
 from opendbc.can.parser import CANParser
 from opendbc.can.can_define import CANDefine
 from openpilot.common.numpy_fast import mean

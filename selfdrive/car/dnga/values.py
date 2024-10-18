@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from collections import defaultdict
 from enum import IntFlag
-
 from cereal import car
 from openpilot.selfdrive.car import CarSpecs, DbcDict, PlatformConfig, Platforms, dbc_dict
 from openpilot.selfdrive.car.docs_definitions import CarInfo
