@@ -1,4 +1,3 @@
-
 # not an actual known crc function, reverse engineered
 def byte_crc4_linear_inverse(byte_list):
   return (-1 * sum(byte_list) + 0x9) & 0xf
@@ -8,7 +7,6 @@ def byd_checksum(byte_key, dat):
   second_bytes = [byte & 0xf for byte in dat]
   remainder = sum(second_bytes) >> 4
   second_bytes.append(byte_key >> 4)
-
 
   first_bytes = [byte >> 4 for byte in dat]
   first_bytes.append(byte_key & 0xf)

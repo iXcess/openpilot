@@ -1,7 +1,5 @@
 from opendbc.can.packer import CANPacker
-
 from openpilot.selfdrive.car.interfaces import CarControllerBase
-
 from openpilot.selfdrive.car.byd.bydcan import create_can_steer_command, send_buttons, create_lkas_hud
 from openpilot.selfdrive.car.byd.values import DBC
 from openpilot.common.numpy_fast import clip
@@ -60,10 +58,8 @@ class CarController(CarControllerBase):
 
       lat_active = enabled and abs(CS.out.steeringAngleDeg) < 90 and \
       self.lka_active and not CS.out.standstill # temporary hardcode 60 because if 90 degrees it will fault
-      # brake_hold = False
       # TODO laneActive, used to check if ALC is off
       can_sends.append(create_can_steer_command(self.packer, apply_angle, lat_active, CS.out.standstill, (self.frame/2) % 16))
-#      can_sends.append(create_accel_command(self.packer, actuators.accel, enabled, brake_hold, (self.frame/2) % 16))
       can_sends.append(create_lkas_hud(self.packer, enabled, CS.lss_state, CS.lss_alert, CS.tsr, \
       CS.abh, CS.passthrough, CS.HMA, CS.pt2, CS.pt3, CS.pt4, CS.pt5, self.lka_active, self.frame % 16))
 

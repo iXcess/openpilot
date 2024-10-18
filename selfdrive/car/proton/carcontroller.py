@@ -1,13 +1,8 @@
-#from cereal import car
 from opendbc.can.packer import CANPacker
-
 from openpilot.selfdrive.car.interfaces import CarControllerBase
 from openpilot.selfdrive.car.proton.protoncan import create_can_steer_command, send_buttons
 from openpilot.selfdrive.car.proton.values import DBC
 from openpilot.common.numpy_fast import clip
-#from openpilot.common.realtime import DT_CTRL
-#from openpilot.common.params import Params
-
 
 def apply_proton_steer_torque_limits(apply_torque, apply_torque_last, driver_torque, LIMITS):
 
@@ -55,12 +50,7 @@ class CarController(CarControllerBase):
     can_sends = []
 
     enabled = CC.latActive
-    #latActive = enabled
     actuators = CC.actuators
-    #lead_visible = CC.hudControl.leadVisible
-    #rlane_visible = CC.hudControl.rightLaneVisible
-    #llane_visible = CC.hudControl.leftLaneVisible
-    #ldw = CC.hudControl.leftLaneDepart or CC.hudControl.rightLaneDepart
 
     # TODO laneActive, used to check if ALC is off
     lat_active = enabled and not CS.lkaDisabled
@@ -81,17 +71,11 @@ class CarController(CarControllerBase):
 
     apply_steer = apply_proton_steer_torque_limits(new_steer, self.last_steer, 0, self.params)
 
-    #ts = self.frame * DT_CTRL
-
-    # CAN controlled lateral running at 50hz
+    # CAN controlled lateral running at 500hz
     if (self.frame % 2) == 0:
       can_sends.append(create_can_steer_command(self.packer, apply_steer, \
       lat_active, CS.hand_on_wheel_warning and CS.is_icc_on, (self.frame/2) % 16, \
       CS.stock_lks_settings,  CS.stock_lks_settings2))
-
-      #can_sends.append(create_hud(self.packer, apply_steer, enabled, ldw, rlane_visible, llane_visible))
-      #can_sends.append(create_lead_detect(self.packer, lead_visible, enabled))
-      #can_sends.append(create_acc_cmd(self.packer, actuators.accel, fake_enable, (frame/2) % 16))
 
     if CS.out.standstill and enabled and (self.frame % 29 == 0):
       # Spam resume button to resume from standstill at max freq of 34.48 Hz.
