@@ -10,6 +10,11 @@ if [ -f /AGNOS ]; then
   #MAPLIBRE_FLAGS="$MAPLIBRE_FLAGS -DCMAKE_SYSTEM_NAME=Android -DANDROID_ABI=arm64-v8a"
 fi
 
+if [ -f /KA2 ]; then
+  ARCHNAME="aarch64"
+  #MAPLIBRE_FLAGS="$MAPLIBRE_FLAGS -DCMAKE_SYSTEM_NAME=Android -DANDROID_ABI=arm64-v8a"
+fi
+
 cd $DIR
 if [ ! -d maplibre ]; then
   git clone git@github.com:maplibre/maplibre-native-qt.git $DIR/maplibre
