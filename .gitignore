@@ -116,7 +116,7 @@ mull.yml
 cereal/gen/
 __pycache__
 
-cereal/test_runner
+cereal/visionipc/test_runner
 
 cereal/libmessaging.*
 cereal/libmessaging_shared.*
