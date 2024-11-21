@@ -13,6 +13,7 @@ SCons.Warnings.warningAsException(True)
 #SetOption('warn', 'all')
 
 TICI = os.path.isfile('/TICI')
+KA2 = os.path.isfile('/KA2')
 AGNOS = TICI
 
 Decider('MD5-timestamp')
@@ -72,7 +73,7 @@ AddOption('--minimal',
 
 ## Architecture name breakdown (arch)
 ## - larch64: linux tici aarch64
-## - aarch64: linux pc aarch64
+## - aarch64: linux pc or ka2 aarch64
 ## - x86_64:  linux pc x64
 ## - Darwin:  mac x64 or arm64
 real_arch = arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
@@ -81,6 +82,7 @@ if platform.system() == "Darwin":
   brew_prefix = subprocess.check_output(['brew', '--prefix'], encoding='utf8').strip()
 elif arch == "aarch64" and AGNOS:
   arch = "larch64"
+
 assert arch in ["larch64", "aarch64", "x86_64", "Darwin"]
 
 lenv = {
@@ -120,6 +122,10 @@ else:
   cxxflags = []
   cpppath = []
   rpath += []
+
+  if KA2:
+      cflags.append("-DRK3588")
+      cxxflags.append("-DRK3588")
 
   # MacOS
   if arch == "Darwin":
