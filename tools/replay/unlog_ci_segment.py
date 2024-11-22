@@ -22,16 +22,16 @@ def input_ready():
 
 
 def replay(route, segment, loop):
-  route = route.replace('|', '/')
+  #route = route.replace('|', '/')
 
-  lr = LogReader(get_url(route, segment))
-  fr = FrameReader(get_url(route, segment, "fcamera"), readahead=True)
+  lr = LogReader(route + "/rlog")
+  #fr = FrameReader(route + "/fcamera.hevc", readahead=True)
 
   # Build mapping from frameId to segmentId from roadEncodeIdx, type == fullHEVC
   msgs = [m for m in lr if m.which() not in IGNORE]
   msgs = sorted(msgs, key=lambda m: m.logMonoTime)
   times = [m.logMonoTime for m in msgs]
-  frame_idx = {m.roadEncodeIdx.frameId: m.roadEncodeIdx.segmentId for m in msgs if m.which() == 'roadEncodeIdx' and m.roadEncodeIdx.type == 'fullHEVC'}
+  #frame_idx = {m.roadEncodeIdx.frameId: m.roadEncodeIdx.segmentId for m in msgs if m.which() == 'roadEncodeIdx' and m.roadEncodeIdx.type == 'fullHEVC'}
 
   socks = {}
   lag = 0.0
@@ -45,13 +45,13 @@ def replay(route, segment, loop):
     start_time = time.time()
     w = msg.which()
 
-    if w == 'roadCameraState':
-      try:
-        img = fr.get(frame_idx[msg.roadCameraState.frameId], pix_fmt="rgb24")
-        img = img[0][:, :, ::-1]  # Convert RGB to BGR, which is what the camera outputs
-        msg.roadCameraState.image = img.flatten().tobytes()
-      except (KeyError, ValueError):
-        pass
+    #if w == 'roadCameraState':
+    #  try:
+    #    img = fr.get(frame_idx[msg.roadCameraState.frameId], pix_fmt="rgb24")
+    #    img = img[0][:, :, ::-1]  # Convert RGB to BGR, which is what the camera outputs
+    #    msg.roadCameraState.image = img.flatten().tobytes()
+    #  except (KeyError, ValueError):
+    #    pass
 
     if w not in socks:
       socks[w] = messaging.pub_sock(w)
