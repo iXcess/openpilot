@@ -93,9 +93,9 @@ class Streamer:
           sett.useMetricSystem = params.get_bool("IsMetric")
           sett.enableSSH = params.get_bool("SshEnabled")
           sett.experimentalModel = params.get_bool("ExperimentalMode")
-          sett.stopDistanceOffset = params.get("StoppingDistanceOffset") or 0
-          sett.pathSkewOffset = params.get("DrivePathOffset") or 0
-          sett.devicePowerOffTime = params.get("PowerSaverEntryDuration") or 0
+          sett.stopDistanceOffset = float(params.get("StoppingDistanceOffset") or 0)
+          sett.pathSkewOffset = float(params.get("DrivePathOffset") or 0)
+          sett.devicePowerOffTime = float(params.get("PowerSaverEntryDuration") or 0)
           # TODO add code for change branch
           sett.changeBranchStatus = params.get("ChangeBranchStatus") or ''
           sett.featurePackage = params.get("FeaturesPackage") or ''
@@ -129,10 +129,38 @@ class Streamer:
       self.ip = addr[0]  # Update client IP
 
       try:
-        nav_instruction = messaging.navInstruction.from_bytes(message)
-        print(f"Deserialized UDP navInstruction: {nav_instruction.key.decode('utf-8')} = {nav_instruction.value.decode('utf-8')}")
-      except Exception:
-        print(f"Schema error. Raw UDP: {message.decode('utf-8')}")
+        with log.NavInstruction.from_bytes(message) as nav:
+          print(f"  maneuverPrimaryText: {nav.maneuverPrimaryText}")
+          print(f"  maneuverSecondaryText: {nav.maneuverSecondaryText}")
+          print(f"  maneuverDistance: {nav.maneuverDistance}")
+          print(f"  maneuverType: {nav.maneuverType}")
+          print(f"  maneuverModifier: {nav.maneuverModifier}")
+          print(f"  distanceRemaining: {nav.distanceRemaining}")
+          print(f"  timeRemaining: {nav.timeRemaining}")
+          print(f"  timeRemainingTypical: {nav.timeRemainingTypical}")
+
+          for lane in nav.lanes:
+            print(f"  Lane Active: {lane.active}")
+            active_direction = lane.activeDirection  # This is a Direction enum
+            print(f"  Lane ActiveDirection: {active_direction}")
+            for direction in lane.directions:
+              direction_name = log.NavInstruction.Direction.__dict__.get(direction, "Unknown")
+              print(f"    Direction: {direction_name}")  # Printing direction by name
+
+          print(f"  showFull: {nav.showFull}")
+
+          print(f"  speedLimit: {nav.speedLimit}")
+          speed_limit_sign = nav.speedLimitSign  # This is a SpeedLimitSign enum
+          speed_limit_sign_name = log.NavInstruction.SpeedLimitSign.__dict__.get(speed_limit_sign, "Unknown")
+          print(f"  speedLimitSign: {speed_limit_sign_name}")  # Printing enum value by name
+
+          for maneuver in nav.allManeuvers:
+            print(f"  Maneuver Distance: {maneuver.distance}")
+            print(f"  Maneuver Type: {maneuver.type}")
+            print(f"  Maneuver Modifier: {maneuver.modifier}")
+
+      except Exception as e:
+        print(f"\nSchema error: {e}\nRaw UDP: {message}")
     except socket.error:
       pass
 
@@ -142,12 +170,50 @@ class Streamer:
         message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
         if message:
           try:
-            # Deserialize the message using the Settings struct
-            settings = messaging.settings.from_bytes(message)
-            print(f"Received settings: {settings.key.decode('utf-8')} = {settings.value.decode('utf-8')}")
-          except Exception:
-            print(f"Schema error. Raw TCP: {message.decode('utf-8')}")
-      except socket.error:
+            with log.Settings.from_bytes(message) as settings:
+              print()
+              print(f"  doReboot: {settings.doReboot}")
+              print(f"  resetCalibration: {settings.resetCalibration}")
+              print(f"  connectivityStatus: {settings.connectivityStatus}")
+              print(f"  deviceStatus: {settings.deviceStatus}")
+              print(f"  alerts: {settings.alerts}")
+              print(f"  remainingDataUpload: {settings.remainingDataUpload}")
+              print(f"  uploadStatus: {settings.uploadStatus}")
+              print(f"  gitCommit: {settings.gitCommit}")
+              print(f"  checkUpdate: {settings.checkUpdate}")
+              print(f"  updateStatus: {settings.updateStatus}")
+              print(f"  enableBukapilot: {settings.enableBukapilot}")
+              print(f"  quietMode: {settings.quietMode}")
+              print(f"  enableAssistedLaneChange: {settings.enableAssistedLaneChange}")
+              print(f"  enableLaneDepartureWarning: {settings.enableLaneDepartureWarning}")
+              print(f"  uploadVideoWiFiOnly: {settings.uploadVideoWiFiOnly}")
+              print(f"  apn: {settings.apn}")
+              print(f"  enableRoaming: {settings.enableRoaming}")
+              print(f"  driverPersonality: {settings.driverPersonality}")
+              print(f"  useMetricSystem: {settings.useMetricSystem}")
+              print(f"  enableSSH: {settings.enableSSH}")
+              print(f"  experimentalModel: {settings.experimentalModel}")
+              print(f"  stopDistanceOffset: {settings.stopDistanceOffset}")
+              print(f"  pathSkewOffset: {settings.pathSkewOffset}")
+              print(f"  devicePowerOffTime: {settings.devicePowerOffTime}")
+              print(f"  wifiConnect: {settings.wifiConnect}")
+              print(f"  changeBranchName: {settings.changeBranchName}")
+              print(f"  changeBranchStatus: {settings.changeBranchStatus}")
+              print(f"  featurePackage: {settings.featurePackage}")
+              print(f"  fixFingerprint: {settings.fixFingerprint}")
+              print(f"  dongleID: {settings.dongleID}")
+              print(f"  serial: {settings.serial}")
+              print(f"  ipAddress: {settings.ipAddress}")
+              print(f"  hostname: {settings.hostname}")
+              print(f"  currentVersion: {settings.currentVersion}")
+              print(f"  currentBranch: {settings.currentBranch}")
+              print(f"  currentChangelog: {settings.currentChangelog}")
+              print(f"  requestDeviceInfo: {settings.requestDeviceInfo}")
+              print(f"  settingsOpen: {settings.settingsOpen}")
+              print()
+          except Exception as e:
+            print(f"\nSchema error: {e}\nRaw TCP: {message}")
+      except Exception:
         pass
 
   def streamd_thread(self):
