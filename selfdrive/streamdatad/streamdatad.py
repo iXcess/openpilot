@@ -144,9 +144,11 @@ class Streamer:
           try:
             # Deserialize the message using the Settings struct
             settings = messaging.settings.from_bytes(message)
-            print(f"Received settings: {settings.key.decode('utf-8')} = {settings.value.decode('utf-8')}")
-          except Exception:
-            print(f"Schema error. Raw TCP: {message.decode('utf-8')}")
+            print("Deserialized settings:")
+            print(settings)
+          except Exception as e:
+            print("Deserialization error:")
+            print(str(e))
       except socket.error:
         pass
 
