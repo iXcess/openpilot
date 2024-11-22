@@ -141,11 +141,13 @@ class Streamer:
       try:
         message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
         if message:
+          print("Message:")
+          print(message)
           try:
-            # Deserialize the message using the Settings struct
-            settings = messaging.settings.from_bytes(message)
-            print("Deserialized settings:")
-            print(settings)
+            with log.Settings.from_bytes(message) as settings:
+              print("Connectivity Status:", settings.connectivityStatus)
+              print("Device Status:", settings.deviceStatus)
+              print("Alerts:", settings.alerts)
           except Exception as e:
             print("Deserialization error:")
             print(str(e))
