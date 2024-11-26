@@ -129,6 +129,21 @@ class Ka2(HardwareBase):
     os.sync()
     self.reboot()
 
+  def get_current_power_draw(self):
+    return 0;
+
+  def get_som_power_draw(self):
+    return 0;
+
+  def get_nvme_temperatures(self):
+    return []
+
+  def get_screen_brightness(self):
+    return 0
+
+  def set_screen_brightness(self, percentage):
+    pass
+
   def get_serial(self):
     return subprocess.check_output("grep 'Serial' /proc/cpuinfo | sed 's/.*: //'", shell=True, text=True).strip()
 
@@ -315,53 +330,15 @@ class Ka2(HardwareBase):
     except Exception:
       return []
 
-  def get_nvme_temperatures(self):
-    ret = []
-    try:
-      out = subprocess.check_output("sudo smartctl -aj /dev/nvme0", shell=True)
-      dat = json.loads(out)
-      ret = list(map(int, dat["nvme_smart_health_information_log"]["temperature_sensors"]))
-    except Exception:
-      pass
-    return ret
-
-  def get_current_power_draw(self):
-    return (self.read_param_file("/sys/class/hwmon/hwmon1/power1_input", int) / 1e6)
-
-  def get_som_power_draw(self):
-    return (self.read_param_file("/sys/class/power_supply/bms/voltage_now", int) * self.read_param_file("/sys/class/power_supply/bms/current_now", int) / 1e12)
-
   def shutdown(self):
     os.system("sudo poweroff")
 
   def get_thermal_config(self):
-    return ThermalConfig(cpu=(["cpu%d-silver-usr" % i for i in range(4)] +
-                              ["cpu%d-gold-usr" % i for i in range(4)], 1000),
-                         gpu=(("gpu0-usr", "gpu1-usr"), 1000),
-                         mem=("ddr-usr", 1000),
+    return ThermalConfig(cpu=(("bigcore0-thermal", "bigcore1-thermal"), 1000),
+                         gpu=(("gpu-thermal", "npu-thermal"), 1000),
+                         mem=("center-thermal", 1000),
                          bat=(None, 1),
-                         pmic=(("pm8998_tz", "pm8005_tz"), 1000))
-
-  def set_screen_brightness(self, percentage):
-    try:
-      with open("/sys/class/backlight/panel0-backlight/max_brightness") as f:
-        max_brightness = float(f.read().strip())
-
-      val = int(percentage * (max_brightness / 100.))
-      with open("/sys/class/backlight/panel0-backlight/brightness", "w") as f:
-        f.write(str(val))
-    except Exception:
-      pass
-
-  def get_screen_brightness(self):
-    try:
-      with open("/sys/class/backlight/panel0-backlight/max_brightness") as f:
-        max_brightness = float(f.read().strip())
-
-      with open("/sys/class/backlight/panel0-backlight/brightness") as f:
-        return int(float(f.read()) / (max_brightness / 100.))
-    except Exception:
-      return 0
+                         pmic=(("soc-thermal", "center-thermal"), 1000))
 
   def set_power_save(self, powersave_enabled):
     # *** CPU config ***
@@ -376,6 +353,7 @@ class Ka2(HardwareBase):
     #  sudo_write(gov, f'/sys/devices/system/cpu/cpufreq/policy{n}/scaling_governor')
 
     # *** IRQ config ***
+    pass
 
     # boardd core
     #affine_irq(4, "spi_geni")         # SPI
@@ -387,17 +365,20 @@ class Ka2(HardwareBase):
     #affine_irq(5, "kgsl-3d0")
 
     # camerad core
-    camera_irqs = ("cci", "cpas_camnoc", "cpas-cdm", "csid", "ife", "csid-lite", "ife-lite")
-    for n in camera_irqs:
-      affine_irq(5, n)
+    #camera_irqs = ("cci", "cpas_camnoc", "cpas-cdm", "csid", "ife", "csid-lite", "ife-lite")
+    #for n in camera_irqs:
+    #  affine_irq(5, n)
+
 
   def get_gpu_usage_percent(self):
+    return 0;
+
+  def get_npu_usage_percent(self):
     try:
-      with open('/sys/class/kgsl/kgsl-3d0/gpubusy') as f:
-        used, total = f.read().strip().split()
-      return 100.0 * int(used) / int(total)
+      npu_load = sudo_read("/sys/kernel/debug/rknpu/load")
+      return [int(x.split('%')[0]) for x in npu_load.split() if '%' in x]
     except Exception:
-      return 0
+      return [0, 0, 0]
 
   def initialize_hardware(self):
     # TODO self.amplifier.initialize_configuration(self.get_device_type())
@@ -415,13 +396,14 @@ class Ka2(HardwareBase):
     sudo_write("f", "/proc/irq/default_smp_affinity")
 
     # move these off the default core
-    affine_irq(1, "msm_drm")   # display
-    affine_irq(1, "msm_vidc")  # encoders
-    affine_irq(1, "i2c_geni")  # sensors
+    #affine_irq(1, "msm_drm")   # display
+    #affine_irq(1, "msm_vidc")  # encoders
+    #affine_irq(1, "i2c_geni")  # sensors
 
-    # setup npu governors
-    # TODO sudo_write("performance", "/sys/class/devfreq/soc:qcom,cpubw/governor")
-    # TODO sudo_write("performance", "/sys/class/devfreq/soc:qcom,memlat-cpu0/governor")
+    # setup cpu, ddr and npu governors
+    # TODO see if cpu and ddr needed
+    sudo_write("userspace", "/sys/class/devfreq/fdab0000.npu/governor")
+    sudo_write("1000000000", "/sys/class/devfreq/fdab0000.npu/userspace/set_freq")
 
   def configure_modem(self):
     sim_id = self.get_sim_info().get('sim_id', '')
@@ -432,43 +414,18 @@ class Ka2(HardwareBase):
     except Exception:
       manufacturer = None
 
-    cmds = []
-    if manufacturer == 'Cavli Inc.':
-      cmds += [
-        # use sim slot
-        'AT^SIMSWAP=1',
+    cmds = [
+      # configure modem as data-centric
+      'AT+QNVW=5280,0,"0102000000000000"',
+      'AT+QNVFW="/nv/item_files/ims/IMS_enable",00',
+      'AT+QNVFW="/nv/item_files/modem/mmode/ue_usage_setting",01',
+    ]
 
-        # configure ECM mode
-        'AT$QCPCFG=usbNet,1'
-      ]
-    else:
-      cmds += [
-        # configure modem as data-centric
-        'AT+QNVW=5280,0,"0102000000000000"',
-        'AT+QNVFW="/nv/item_files/ims/IMS_enable",00',
-        'AT+QNVFW="/nv/item_files/modem/mmode/ue_usage_setting",01',
-      ]
-
-      # clear out old blue prime initial APN
-      os.system('mmcli -m any --3gpp-set-initial-eps-bearer-settings="apn="')
     for cmd in cmds:
       try:
         modem.Command(cmd, math.ceil(TIMEOUT), dbus_interface=MM_MODEM, timeout=TIMEOUT)
       except Exception:
         pass
-
-    # eSIM prime
-    if sim_id.startswith('8985235'):
-      dest = "/etc/NetworkManager/system-connections/esim.nmconnection"
-      with open(Path(__file__).parent/'esim.nmconnection') as f, tempfile.NamedTemporaryFile(mode='w') as tf:
-        dat = f.read()
-        dat = dat.replace("sim-id=", f"sim-id={sim_id}")
-        tf.write(dat)
-        tf.flush()
-
-        # needs to be root
-        os.system(f"sudo cp {tf.name} {dest}")
-      os.system(f"sudo nmcli con load {dest}")
 
   def get_networks(self):
     r = {}
@@ -517,27 +474,27 @@ class Ka2(HardwareBase):
     return True
 
   def reset_internal_panda(self):
-    gpio_init(GPIO.STM_RST_N, True)
+    #gpio_init(GPIO.STM_RST_N, True)
 
-    gpio_set(GPIO.STM_RST_N, 1)
-    time.sleep(1)
-    gpio_set(GPIO.STM_RST_N, 0)
+    #gpio_set(GPIO.STM_RST_N, 1)
+    #time.sleep(1)
+    #gpio_set(GPIO.STM_RST_N, 0)
+    pass
 
   def recover_internal_panda(self):
-    gpio_init(GPIO.STM_RST_N, True)
-    gpio_init(GPIO.STM_BOOT0, True)
+    #gpio_init(GPIO.STM_RST_N, True)
+    #gpio_init(GPIO.STM_BOOT0, True)
 
-    gpio_set(GPIO.STM_RST_N, 1)
-    gpio_set(GPIO.STM_BOOT0, 1)
-    time.sleep(0.5)
-    gpio_set(GPIO.STM_RST_N, 0)
-    time.sleep(0.5)
-    gpio_set(GPIO.STM_BOOT0, 0)
+    #gpio_set(GPIO.STM_RST_N, 1)
+    #gpio_set(GPIO.STM_BOOT0, 1)
+    #time.sleep(0.5)
+    #gpio_set(GPIO.STM_RST_N, 0)
+    #time.sleep(0.5)
+    #gpio_set(GPIO.STM_BOOT0, 0)
+    pass
 
   def booted(self):
-    # this normally boots within 8s, but on rare occasions takes 30+s
-    encoder_state = sudo_read("/sys/kernel/debug/msm_vidc/core0/info")
-    if "Core state: 0" in encoder_state and (time.monotonic() < 60*2):
+    if (time.monotonic() < 60*2):
       return False
     return True
 
