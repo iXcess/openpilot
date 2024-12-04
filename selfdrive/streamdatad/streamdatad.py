@@ -30,6 +30,8 @@ class Streamer:
   def __init__(self, sm=None):
     self.local_ip = get_wlan_ip()
     self.ip = None
+    self.settingsOpen = False
+    self.requestInfo = False
     self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
@@ -63,8 +65,9 @@ class Streamer:
   def send_udp_message(self):
     if self.ip:
       self.sm.update()
-      message = self.sm['navInstruction'].as_builder().to_bytes()
-      self.udp_sock.sendto(message, (self.ip, UDP_PORT))
+      if self.sm['navInstruction'].maneuverPrimaryText:
+        message = self.sm['navInstruction'].as_builder().to_bytes()
+        self.udp_sock.sendto(message, (self.ip, UDP_PORT))
 
   def send_tcp_message(self):
     if self.tcp_conn:
@@ -101,8 +104,7 @@ class Streamer:
           sett.featurePackage = params.get("FeaturesPackage") or ''
           sett.fixFingerprint = params.get("FixFingerprint") or ''
 
-        request_info = True
-        if request_info:
+        if self.requestInfo and not self.settingsOpen:
           sett.dongleID = params.get("DongleId")
           sett.serial = params.get("HardwareSerial") or ''
           sett.ipAddress = get_wlan_ip()
@@ -112,11 +114,16 @@ class Streamer:
           sett.currentChangelog = params.get("UpdaterCurrentReleaseNotes") or ''
 
         self.tcp_conn.sendall(sett.to_bytes())
+        # Reset values after sending
+        self.requestInfo = False
+        self.settingsOpen = False
+
       except socket.error:
         self.tcp_conn = None  # Reset connection on error
 
   def accept_new_connection(self):
     if not self.tcp_conn:
+      print("Accepting new connection")
       try:
         self.tcp_conn, addr = self.tcp_sock.accept()
         self.ip = addr[0]  # Update client IP for UDP messages
@@ -211,19 +218,38 @@ class Streamer:
               print(f"  requestDeviceInfo: {settings.requestDeviceInfo}")
               print(f"  settingsOpen: {settings.settingsOpen}")
               print()
+
+              self.settingsOpen = settings.settingsOpen
+              self.requestInfo = settings.requestDeviceInfo and not settings.settingsOpen
+              if settings.settingsOpen and not settings.requestDeviceInfo:
+                # Set values
+                print("Putting settings values")
+                params.put_bool("OpenpilotEnabledToggle", settings.enableBukapilot)
+                params.put_bool("QuietMode", settings.quietMode)
+                params.put_bool("IsAlcEnabled", settings.enableAssistedLaneChange)
+                params.put_bool("IsLdwEnabled", settings.enableLaneDepartureWarning)
+                params.put_bool("LogVideoWifiOnly", settings.uploadVideoWiFiOnly)
+                params.put_bool("GsmRoaming", settings.enableRoaming)
+                params.put_bool("IsMetric", settings.useMetricSystem)
+                params.put_bool("SshEnabled", settings.enableSSH)
+                params.put_bool("ExperimentalMode", settings.experimentalModel)
+                params.put("StoppingDistanceOffset", str(settings.stopDistanceOffset))
+                params.put("DrivePathOffset", str(settings.pathSkewOffset))
+                params.put("PowerSaverEntryDuration", str(settings.devicePowerOffTime))
+
           except Exception as e:
-            print(f"\nSchema error: {e}\nRaw TCP: {message}")
+            print(f"\nError: {e}\nRaw TCP: {message}")
       except Exception:
         pass
 
   def streamd_thread(self):
     while True:
       self.rk.monitor_time()
+      self.receive_udp_message()
       self.send_udp_message()
       self.accept_new_connection()
-      self.send_tcp_message()
-      self.receive_udp_message()
       self.receive_tcp_message()
+      self.send_tcp_message()
       self.rk.keep_time()
 
   def close_connections(self):
