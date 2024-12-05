@@ -42,6 +42,7 @@ struct Settings {
   changeBranchStatus @26:Text;
   featurePackage @27:Text;
   fixFingerprint @28:Text;
+  recordUploadDriverCamera @38:Bool;
 
   # Send if requested
   dongleID @29:Text;

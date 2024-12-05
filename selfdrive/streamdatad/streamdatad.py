@@ -96,6 +96,7 @@ class Streamer:
           sett.useMetricSystem = params.get_bool("IsMetric")
           sett.enableSSH = params.get_bool("SshEnabled")
           sett.experimentalModel = params.get_bool("ExperimentalMode")
+          sett.recordUploadDriverCamera = params.get_bool("RecordFront")
           sett.stopDistanceOffset = float(params.get("StoppingDistanceOffset") or 0)
           sett.pathSkewOffset = float(params.get("DrivePathOffset") or 0)
           sett.devicePowerOffTime = float(params.get("PowerSaverEntryDuration") or 0)
@@ -123,7 +124,6 @@ class Streamer:
 
   def accept_new_connection(self):
     if not self.tcp_conn:
-      print("Accepting new connection")
       try:
         self.tcp_conn, addr = self.tcp_sock.accept()
         self.ip = addr[0]  # Update client IP for UDP messages
@@ -178,52 +178,27 @@ class Streamer:
         if message:
           try:
             with log.Settings.from_bytes(message) as settings:
-              print()
-              print(f"  doReboot: {settings.doReboot}")
-              print(f"  resetCalibration: {settings.resetCalibration}")
-              print(f"  connectivityStatus: {settings.connectivityStatus}")
-              print(f"  deviceStatus: {settings.deviceStatus}")
-              print(f"  alerts: {settings.alerts}")
-              print(f"  remainingDataUpload: {settings.remainingDataUpload}")
-              print(f"  uploadStatus: {settings.uploadStatus}")
-              print(f"  gitCommit: {settings.gitCommit}")
-              print(f"  checkUpdate: {settings.checkUpdate}")
-              print(f"  updateStatus: {settings.updateStatus}")
-              print(f"  enableBukapilot: {settings.enableBukapilot}")
-              print(f"  quietMode: {settings.quietMode}")
-              print(f"  enableAssistedLaneChange: {settings.enableAssistedLaneChange}")
-              print(f"  enableLaneDepartureWarning: {settings.enableLaneDepartureWarning}")
-              print(f"  uploadVideoWiFiOnly: {settings.uploadVideoWiFiOnly}")
-              print(f"  apn: {settings.apn}")
-              print(f"  enableRoaming: {settings.enableRoaming}")
-              print(f"  driverPersonality: {settings.driverPersonality}")
-              print(f"  useMetricSystem: {settings.useMetricSystem}")
-              print(f"  enableSSH: {settings.enableSSH}")
-              print(f"  experimentalModel: {settings.experimentalModel}")
-              print(f"  stopDistanceOffset: {settings.stopDistanceOffset}")
-              print(f"  pathSkewOffset: {settings.pathSkewOffset}")
-              print(f"  devicePowerOffTime: {settings.devicePowerOffTime}")
-              print(f"  wifiConnect: {settings.wifiConnect}")
-              print(f"  changeBranchName: {settings.changeBranchName}")
-              print(f"  changeBranchStatus: {settings.changeBranchStatus}")
-              print(f"  featurePackage: {settings.featurePackage}")
-              print(f"  fixFingerprint: {settings.fixFingerprint}")
-              print(f"  dongleID: {settings.dongleID}")
-              print(f"  serial: {settings.serial}")
-              print(f"  ipAddress: {settings.ipAddress}")
-              print(f"  hostname: {settings.hostname}")
-              print(f"  currentVersion: {settings.currentVersion}")
-              print(f"  currentBranch: {settings.currentBranch}")
-              print(f"  currentChangelog: {settings.currentChangelog}")
-              print(f"  requestDeviceInfo: {settings.requestDeviceInfo}")
-              print(f"  settingsOpen: {settings.settingsOpen}")
-              print()
 
               self.settingsOpen = settings.settingsOpen
               self.requestInfo = settings.requestDeviceInfo and not settings.settingsOpen
               if settings.settingsOpen and not settings.requestDeviceInfo:
+                print("Received settings:")
+                print(f"EnableBukapilot: {settings.enableBukapilot}")
+                print(f"QuietMode: {settings.quietMode}")
+                print(f"EnableAssistedLaneChange: {settings.enableAssistedLaneChange}")
+                print(f"EnableLaneDepartureWarning: {settings.enableLaneDepartureWarning}")
+                print(f"UploadVideoWiFiOnly: {settings.uploadVideoWiFiOnly}")
+                print(f"EnableRoaming: {settings.enableRoaming}")
+                print(f"UseMetricSystem: {settings.useMetricSystem}")
+                print(f"EnableSSH: {settings.enableSSH}")
+                print(f"ExperimentalModel: {settings.experimentalModel}")
+                print(f"RecordUploadDriverCamera: {settings.recordUploadDriverCamera}")
+                print(f"StopDistanceOffset: {settings.stopDistanceOffset}")
+                print(f"PathSkewOffset: {settings.pathSkewOffset}")
+                print(f"DevicePowerOffTime: {settings.devicePowerOffTime}")
+
                 # Set values
-                print("Putting settings values")
+                print("\nPutting parameters")
                 params.put_bool("OpenpilotEnabledToggle", settings.enableBukapilot)
                 params.put_bool("QuietMode", settings.quietMode)
                 params.put_bool("IsAlcEnabled", settings.enableAssistedLaneChange)
@@ -233,6 +208,7 @@ class Streamer:
                 params.put_bool("IsMetric", settings.useMetricSystem)
                 params.put_bool("SshEnabled", settings.enableSSH)
                 params.put_bool("ExperimentalMode", settings.experimentalModel)
+                params.put_bool("RecordFront", settings.recordUploadDriverCamera)
                 params.put("StoppingDistanceOffset", str(settings.stopDistanceOffset))
                 params.put("DrivePathOffset", str(settings.pathSkewOffset))
                 params.put("PowerSaverEntryDuration", str(settings.devicePowerOffTime))
