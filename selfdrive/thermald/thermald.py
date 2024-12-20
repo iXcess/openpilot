@@ -114,7 +114,7 @@ def hw_state_thread(end_event, hw_queue):
           modem_temps = prev_hw_state.modem_temps
 
         # Log modem version once
-        if (AGNOS or KA2) and ((modem_version is None) or (modem_nv is None)):
+        if (AGNOS and KA2) and ((modem_version is None) or (modem_nv is None)):
           modem_version = HARDWARE.get_modem_version()
           modem_nv = HARDWARE.get_modem_nv()
 
@@ -149,10 +149,11 @@ def hw_state_thread(end_event, hw_queue):
           pass
 
         # TODO: remove this once the config is in AGNOS
-        if not modem_configured and len(HARDWARE.get_sim_info().get('sim_id', '')) > 0:
+        """if not modem_configured and len(HARDWARE.get_sim_info().get('sim_id', '')) > 0:
           cloudlog.warning("configuring modem")
           HARDWARE.configure_modem()
           modem_configured = True
+        """
 
         prev_hw_state = hw_state
       except Exception:
