@@ -2,6 +2,7 @@ import socket
 import fcntl
 import struct
 import os
+import msgpack
 
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
@@ -36,7 +37,7 @@ class Streamer:
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
     self.sm = sm if sm \
-      else messaging.SubMaster(['navInstruction', 'settings', 'deviceState', 'peripheralState',\
+      else messaging.SubMaster(['navInstruction', 'deviceState', 'peripheralState',\
       'controlsState', 'uploaderState'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
@@ -72,49 +73,48 @@ class Streamer:
   def send_tcp_message(self):
     if self.tcp_conn:
       try:
-        sett = self.sm['settings'].as_builder()
-
-        sett.connectivityStatus = str(self.sm['deviceState'].networkType)
-        sett.deviceStatus = self.deviceStatus()
-        sett.alerts = (str(self.sm['controlsState'].alertText1) + "\n" + str(self.sm['controlsState'].alertText2))
-        sett.remainingDataUpload = self.remainingDataUpload()
+        sett = {}
+        sett['connectivityStatus'] = str(self.sm['deviceState'].networkType)
+        sett['deviceStatus'] = self.deviceStatus()
+        sett['alerts'] = (str(self.sm['controlsState'].alertText1) + "\n" + str(self.sm['controlsState'].alertText2))
+        sett['remainingDataUpload'] = self.remainingDataUpload()
         # TODO send uploadStatus in selfdrive/loggerd/uploader.py
-        sett.gitCommit = get_commit()
+        sett['gitCommit'] = get_commit()
         # TODO include bukapilot changes in selfdrive/updated.py
-        sett.updateStatus = params.get("UpdaterState") or ''
+        sett['updateStatus'] = params.get("UpdaterState") or ''
 
         settings_open = True
         if settings_open:
-          sett.enableBukapilot = params.get_bool("OpenpilotEnabledToggle")
-          sett.quietMode = params.get_bool("QuietMode")
-          sett.enableAssistedLaneChange = params.get_bool("IsAlcEnabled")
-          sett.enableLaneDepartureWarning = params.get_bool("IsLdwEnabled")
-          sett.uploadVideoWiFiOnly = params.get_bool("LogVideoWifiOnly")
-          sett.apn = params.get("GsmApn") or ''
-          sett.enableRoaming = params.get_bool("GsmRoaming")
-          sett.driverPersonality = params.get("LongitudinalPersonality")
-          sett.useMetricSystem = params.get_bool("IsMetric")
-          sett.enableSSH = params.get_bool("SshEnabled")
-          sett.experimentalModel = params.get_bool("ExperimentalMode")
-          sett.recordUploadDriverCamera = params.get_bool("RecordFront")
-          sett.stopDistanceOffset = float(params.get("StoppingDistanceOffset") or 0)
-          sett.pathSkewOffset = float(params.get("DrivePathOffset") or 0)
-          sett.devicePowerOffTime = float(params.get("PowerSaverEntryDuration") or 0)
+          sett['enableBukapilot'] = params.get_bool("OpenpilotEnabledToggle")
+          sett['quietMode'] = params.get_bool("QuietMode")
+          sett['enableAssistedLaneChange'] = params.get_bool("IsAlcEnabled")
+          sett['enableLaneDepartureWarning'] = params.get_bool("IsLdwEnabled")
+          sett['uploadVideoWiFiOnly'] = params.get_bool("LogVideoWifiOnly")
+          sett['apn'] = params.get("GsmApn") or ''
+          sett['enableRoaming'] = params.get_bool("GsmRoaming")
+          sett['driverPersonality'] = params.get("LongitudinalPersonality")
+          sett['useMetricSystem'] = params.get_bool("IsMetric")
+          sett['enableSSH'] = params.get_bool("SshEnabled")
+          sett['experimentalModel'] = params.get_bool("ExperimentalMode")
+          sett['recordUploadDriverCamera'] = params.get_bool("RecordFront")
+          sett['stopDistanceOffset'] = float(params.get("StoppingDistanceOffset") or 0)
+          sett['pathSkewOffset'] = float(params.get("DrivePathOffset") or 0)
+          sett['devicePowerOffTime'] = float(params.get("PowerSaverEntryDuration") or 0)
           # TODO add code for change branch
-          sett.changeBranchStatus = params.get("ChangeBranchStatus") or ''
-          sett.featurePackage = params.get("FeaturesPackage") or ''
-          sett.fixFingerprint = params.get("FixFingerprint") or ''
+          sett['changeBranchStatus'] = params.get("ChangeBranchStatus") or ''
+          sett['featurePackage'] = params.get("FeaturesPackage") or ''
+          sett['fixFingerprint'] = params.get("FixFingerprint") or ''
 
         if self.requestInfo and not self.settingsOpen:
-          sett.dongleID = params.get("DongleId")
-          sett.serial = params.get("HardwareSerial") or ''
-          sett.ipAddress = get_wlan_ip()
-          sett.hostname = socket.gethostname()
-          sett.currentVersion = get_version()
-          sett.currentBranch = get_short_branch()
-          sett.currentChangelog = params.get("UpdaterCurrentReleaseNotes") or ''
+          sett['dongleID'] = params.get("DongleId")
+          sett['serial'] = params.get("HardwareSerial") or ''
+          sett['ipAddress'] = get_wlan_ip()
+          sett['hostname'] = socket.gethostname()
+          sett['currentVersion'] = get_version()
+          sett['currentBranch'] = get_short_branch()
+          sett['currentChangelog'] = params.get("UpdaterCurrentReleaseNotes") or ''
 
-        self.tcp_conn.sendall(sett.to_bytes())
+        self.tcp_conn.sendall(msgpack.packb(sett))
         # Reset values after sending
         self.requestInfo = False
         self.settingsOpen = False
@@ -177,41 +177,41 @@ class Streamer:
         message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
         if message:
           try:
-            with log.Settings.from_bytes(message) as settings:
+            settings = msgpack.unpackb(message)
+            self.settingsOpen = settings['settingsOpen']
+            self.requestInfo = settings['requestDeviceInfo'] and not settings['settingsOpen']
 
-              self.settingsOpen = settings.settingsOpen
-              self.requestInfo = settings.requestDeviceInfo and not settings.settingsOpen
-              if settings.settingsOpen and not settings.requestDeviceInfo:
-                print("Received settings:")
-                print(f"EnableBukapilot: {settings.enableBukapilot}")
-                print(f"QuietMode: {settings.quietMode}")
-                print(f"EnableAssistedLaneChange: {settings.enableAssistedLaneChange}")
-                print(f"EnableLaneDepartureWarning: {settings.enableLaneDepartureWarning}")
-                print(f"UploadVideoWiFiOnly: {settings.uploadVideoWiFiOnly}")
-                print(f"EnableRoaming: {settings.enableRoaming}")
-                print(f"UseMetricSystem: {settings.useMetricSystem}")
-                print(f"EnableSSH: {settings.enableSSH}")
-                print(f"ExperimentalModel: {settings.experimentalModel}")
-                print(f"RecordUploadDriverCamera: {settings.recordUploadDriverCamera}")
-                print(f"StopDistanceOffset: {settings.stopDistanceOffset}")
-                print(f"PathSkewOffset: {settings.pathSkewOffset}")
-                print(f"DevicePowerOffTime: {settings.devicePowerOffTime}")
+            if settings['settingsOpen'] and not settings['requestDeviceInfo']:
+              print("Received settings:")
+              print(f"EnableBukapilot: {settings['enableBukapilot']}")
+              print(f"QuietMode: {settings['quietMode']}")
+              print(f"EnableAssistedLaneChange: {settings['enableAssistedLaneChange']}")
+              print(f"EnableLaneDepartureWarning: {settings['enableLaneDepartureWarning']}")
+              print(f"UploadVideoWiFiOnly: {settings['uploadVideoWiFiOnly']}")
+              print(f"EnableRoaming: {settings['enableRoaming']}")
+              print(f"UseMetricSystem: {settings['useMetricSystem']}")
+              print(f"EnableSSH: {settings['enableSSH']}")
+              print(f"ExperimentalModel: {settings['experimentalModel']}")
+              print(f"RecordUploadDriverCamera: {settings['recordUploadDriverCamera']}")
+              print(f"StopDistanceOffset: {settings['stopDistanceOffset']}")
+              print(f"PathSkewOffset: {settings['pathSkewOffset']}")
+              print(f"DevicePowerOffTime: {settings['devicePowerOffTime']}")
 
-                # Set values
-                print("\nPutting parameters")
-                params.put_bool("OpenpilotEnabledToggle", settings.enableBukapilot)
-                params.put_bool("QuietMode", settings.quietMode)
-                params.put_bool("IsAlcEnabled", settings.enableAssistedLaneChange)
-                params.put_bool("IsLdwEnabled", settings.enableLaneDepartureWarning)
-                params.put_bool("LogVideoWifiOnly", settings.uploadVideoWiFiOnly)
-                params.put_bool("GsmRoaming", settings.enableRoaming)
-                params.put_bool("IsMetric", settings.useMetricSystem)
-                params.put_bool("SshEnabled", settings.enableSSH)
-                params.put_bool("ExperimentalMode", settings.experimentalModel)
-                params.put_bool("RecordFront", settings.recordUploadDriverCamera)
-                params.put("StoppingDistanceOffset", str(settings.stopDistanceOffset))
-                params.put("DrivePathOffset", str(settings.pathSkewOffset))
-                params.put("PowerSaverEntryDuration", str(settings.devicePowerOffTime))
+              # Set values
+              print("\nPutting parameters")
+              params.put_bool("OpenpilotEnabledToggle", settings['enableBukapilot'])
+              params.put_bool("QuietMode", settings['quietMode'])
+              params.put_bool("IsAlcEnabled", settings['enableAssistedLaneChange'])
+              params.put_bool("IsLdwEnabled", settings['enableLaneDepartureWarning'])
+              params.put_bool("LogVideoWifiOnly", settings['uploadVideoWiFiOnly'])
+              params.put_bool("GsmRoaming", settings['enableRoaming'])
+              params.put_bool("IsMetric", settings['useMetricSystem'])
+              params.put_bool("SshEnabled", settings['enableSSH'])
+              params.put_bool("ExperimentalMode", settings['experimentalModel'])
+              params.put_bool("RecordFront", settings['recordUploadDriverCamera'])
+              params.put("StoppingDistanceOffset", str(settings['stopDistanceOffset']))
+              params.put("DrivePathOffset", str(settings['pathSkewOffset']))
+              params.put("PowerSaverEntryDuration", str(settings['devicePowerOffTime']))
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
