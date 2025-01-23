@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <thread>
+#include <sys/mman.h>
 
 #include "cereal/messaging/messaging.h"
 #include "cereal/visionipc/visionipc_server.h"
@@ -44,12 +45,10 @@ typedef struct FrameMetadata {
 
 struct MultiCameraState;
 class CameraState;
-class Debayer;
 
 class CameraBuf {
 private:
   VisionIpcServer *vipc_server;
-  Debayer *debayer = nullptr;
   VisionStreamType stream_type;
   int cur_buf_idx;
   SafeQueue<int> safe_queue;

@@ -35,8 +35,14 @@ public:
 
   unique_fd sensor_fd;
   unique_fd csiphy_fd;
+  unique_fd video_fd;
 
   int camera_num;
+
+  struct v4l2_format fmt;
+  struct v4l2_requestbuffers req;
+  struct v4l2_buffer v4l_buf;
+  struct v4l2_plane planes[1];
 
   void handle_camera_event(void *evdat);
   void update_exposure_score(float desired_ev, int exp_t, int exp_g_idx, float exp_gain);
@@ -48,6 +54,8 @@ public:
   void sensor_set_parameters();
   void camera_map_bufs(MultiCameraState *s);
   void camera_init(MultiCameraState *s, VisionIpcServer *v, cl_device_id device_id, cl_context ctx, VisionStreamType yuv_type);
+  void dequeue_buf();
+  void stream_start();
   void camera_close();
 
   int32_t session_handle;
@@ -84,9 +92,6 @@ private:
 };
 
 typedef struct MultiCameraState {
-  unique_fd video0_fd;
-  unique_fd cam_sync_fd;
-  unique_fd isp_fd;
   int device_iommu;
   int cdm_iommu;
 
