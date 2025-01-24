@@ -84,6 +84,7 @@ class Streamer:
         sett['updateStatus'] = params.get("UpdaterState") or ''
 
         settings_open = True
+        sett['isOffroad'] = params.get_bool("IsOffroad")
         if settings_open:
           sett['enableBukapilot'] = params.get_bool("OpenpilotEnabledToggle")
           sett['quietMode'] = params.get_bool("QuietMode")
@@ -178,10 +179,11 @@ class Streamer:
         if message:
           try:
             settings = msgpack.unpackb(message)
+            offroad = params.get_bool("IsOffroad")
             self.settingsOpen = settings['settingsOpen']
             self.requestInfo = settings['requestDeviceInfo'] and not settings['settingsOpen']
 
-            if settings['settingsOpen'] and not settings['requestDeviceInfo']:
+            if offroad and settings['settingsOpen'] and not settings['requestDeviceInfo']:
               print("Received settings:")
               print(f"EnableBukapilot: {settings['enableBukapilot']}")
               print(f"QuietMode: {settings['quietMode']}")
