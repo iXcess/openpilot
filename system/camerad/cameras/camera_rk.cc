@@ -1,4 +1,4 @@
-#include "system/camerad/cameras/camera_qcom2.h"
+#include "system/camerad/cameras/camera_rk.h"
 
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -33,6 +33,7 @@ void CameraState::camera_map_bufs(MultiCameraState *s) {
     assert(ioctl(video_fd, VIDIOC_QUERYBUF, &v4l_buf) >= 0);
 
     buf.camera_bufs[i].mmap_len = v4l_buf.m.planes[0].length;
+    buf.camera_bufs[i].len = v4l_buf.m.planes[0].length;
     buf.camera_bufs[i].addr = mmap(NULL, v4l_buf.m.planes[0].length,
                                   PROT_READ | PROT_WRITE,
                                   MAP_SHARED,
@@ -53,6 +54,14 @@ void CameraState::camera_init(MultiCameraState *s, VisionIpcServer * v, cl_devic
   fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
   assert(ioctl(video_fd, VIDIOC_S_FMT, &fmt) >= 0);
+
+  // set frame rate
+  //struct v4l2_streamparm streamparm;
+  //memset(&streamparm, 0, sizeof(streamparm));
+  //streamparm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+  //streamparm.parm.capture.timeperframe.numerator = 1;
+  //streamparm.parm.capture.timeperframe.denominator = 20;  // fps = numerator/denominator
+  //assert(ioctl(video_fd, VIDIOC_S_PARM, &streamparm) >= 0);
 
   memset(&req, 0, sizeof(req));
   req.count = FRAME_BUF_COUNT;
@@ -78,7 +87,7 @@ void CameraState::camera_open(MultiCameraState *multi_cam_state_, int camera_num
 void CameraState::stream_start() {
   // start v4l2 buffer queue
   LOG("-- Start Queueing V4L2 buffers");
-  for (int i = 0; i < FRAME_BUF_COUNT; i++) {
+  for (int i = 0; i < FRAME_BUF_COUNT; ++i) {
     v4l_buf.index = i;
     assert(ioctl(video_fd, VIDIOC_QBUF, &v4l_buf) >= 0);
   }
@@ -89,11 +98,14 @@ void CameraState::stream_start() {
 
 void CameraState::dequeue_buf() {
   assert(ioctl(video_fd, VIDIOC_DQBUF, &v4l_buf) >= 0);
+  // queue the index number of the v4l buffer that has just been populated
+  buf.queue(v4l_buf.index);
+
+  buf.camera_bufs_metadata[v4l_buf.index].frame_id = v4l_buf.sequence;
+  buf.camera_bufs_metadata[v4l_buf.index].timestamp_sof = static_cast<uint64_t>(v4l_buf.timestamp.tv_sec * 1000000000 + v4l_buf.timestamp.tv_usec * 1000);
+  buf.camera_bufs_metadata[v4l_buf.index].timestamp_eof = static_cast<uint64_t>(v4l_buf.timestamp.tv_sec * 1000000000 + v4l_buf.timestamp.tv_usec * 1000);
+  LOGE("timestamp %lu", buf.camera_bufs_metadata[v4l_buf.index].timestamp_sof);
   // immediately queue after dequeing the buffer
-  //buf.queue(4);
-  //TODO maybe can get the timestamp and sequence value from here
-  LOGE("%d", v4l_buf.index);
-  LOGE("%d", v4l_buf.sequence);
   assert(ioctl(video_fd, VIDIOC_QBUF, &v4l_buf) >= 0);
 }
 
@@ -108,12 +120,12 @@ void cameras_init(VisionIpcServer *v, MultiCameraState *s, cl_device_id device_i
 void cameras_open(MultiCameraState *s) {
   LOG("-- Opening devices");
 
-  s->driver_cam.camera_open(s, 2, !env_disable_driver);
-  LOGD("driver camera opened");
-  s->road_cam.camera_open(s, 1, !env_disable_road);
+  s->road_cam.camera_open(s, 2, !env_disable_road);
   LOGD("road camera opened");
-  s->wide_road_cam.camera_open(s, 0, !env_disable_wide_road);
+  s->wide_road_cam.camera_open(s, 1, !env_disable_wide_road);
   LOGD("wide road camera opened");
+  s->driver_cam.camera_open(s, 0, !env_disable_driver);
+  LOGD("driver camera opened");
  }
 
 void CameraState::camera_close() {
@@ -139,15 +151,13 @@ static void process_driver_camera(MultiCameraState *s, CameraState *c, int cnt) 
   MessageBuilder msg;
   auto framed = msg.initEvent().initDriverCameraState();
   framed.setFrameType(cereal::FrameData::FrameType::FRONT);
-  //fill_frame_data(framed, c->buf.cur_frame_data, c);
+  fill_frame_data(framed, c->buf.cur_frame_data, c);
 
-  LOGE("ADSF");
-  //c->ci->processRegisters(c, framed);
   s->pm->send("driverCameraState", msg);
 }
 
+
 void process_road_camera(MultiCameraState *s, CameraState *c, int cnt) {
-  /*
   const CameraBuf *b = &c->buf;
 
   MessageBuilder msg;
@@ -158,12 +168,7 @@ void process_road_camera(MultiCameraState *s, CameraState *c, int cnt) {
   }
   LOGT(c->buf.cur_frame_data.frame_id, "%s: Image set", c == &s->road_cam ? "RoadCamera" : "WideRoadCamera");
 
-  c->ci->processRegisters(c, framed);
   s->pm->send(c == &s->road_cam ? "roadCameraState" : "wideRoadCameraState", msg);
-
-  const auto [x, y, w, h] = (c == &s->wide_road_cam) ? std::tuple(96, 250, 1734, 524) : std::tuple(96, 160, 1734, 986);
-  const int skip = 2;
-  */
 }
 
 void cameras_run(MultiCameraState *s) {

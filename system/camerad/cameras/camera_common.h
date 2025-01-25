@@ -61,7 +61,7 @@ public:
   VisionBuf *cur_camera_buf;
   std::unique_ptr<VisionBuf[]> camera_bufs;
   std::unique_ptr<FrameMetadata[]> camera_bufs_metadata;
-  int rgb_width, rgb_height;
+  int rgb_width, rgb_height, nv12_frame_size;
 
   CameraBuf() = default;
   ~CameraBuf();

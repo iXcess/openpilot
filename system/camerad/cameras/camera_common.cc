@@ -12,7 +12,7 @@
 #include "common/util.h"
 #include "third_party/linux/include/msm_media_info.h"
 
-#include "system/camerad/cameras/camera_qcom2.h"
+#include "system/camerad/cameras/camera_rk.h"
 #ifdef QCOM2
 #include "CL/cl_ext_qcom.h"
 #endif
@@ -24,23 +24,24 @@ void CameraBuf::init(cl_device_id device_id, cl_context context, CameraState *s,
   stream_type = type;
   frame_buf_count = frame_cnt;
 
-  // NV12 frame
-  const int frame_size = (1920 * 1080 * 3)/2;
-  camera_bufs = std::make_unique<VisionBuf[]>(frame_buf_count);
-  camera_bufs_metadata = std::make_unique<FrameMetadata[]>(frame_buf_count);
-
-  for (int i = 0; i < frame_buf_count; i++) {
-    camera_bufs[i].allocate(frame_size);
-  }
-  LOGD("allocated %d buffers", frame_buf_count);
-
   rgb_width = 1920;
   rgb_height = 1080;
 
-  int nv12_width = 1920;
-  int nv12_height = 1080;
-  size_t nv12_size = (nv12_width * nv12_height * 3)/2;  // comes from v4l2_format.fmt.pix_mp.plane_fmt[0].sizeimage
+  // NV12 frame
+  nv12_frame_size = (rgb_width * rgb_height * 3)/2;
+  camera_bufs = std::make_unique<VisionBuf[]>(frame_buf_count);
+  camera_bufs_metadata = std::make_unique<FrameMetadata[]>(frame_buf_count);
+
+  int nv12_width = rgb_width;
+  int nv12_height = rgb_height;
+  size_t nv12_size = nv12_frame_size;
   size_t nv12_uv_offset = nv12_width * nv12_height;
+
+  for (int i = 0; i < frame_buf_count; i++) {
+    camera_bufs[i].allocate(nv12_frame_size);
+  }
+  LOGD("allocated %d buffers", frame_buf_count);
+
   vipc_server->create_buffers_with_sizes(stream_type, YUV_BUFFER_COUNT, false, rgb_width, rgb_height, nv12_size, nv12_width, nv12_uv_offset);
   LOGD("created %d YUV vipc buffers with size %dx%d", YUV_BUFFER_COUNT, nv12_width, nv12_height);
 }
@@ -54,28 +55,20 @@ CameraBuf::~CameraBuf() {
 bool CameraBuf::acquire() {
   if (!safe_queue.try_pop(cur_buf_idx, 50)) return false;
 
-  if (camera_bufs_metadata[cur_buf_idx].frame_id == -1) {
-    LOGE("no frame data? wtf");
-    return false;
-  }
-
   cur_frame_data = camera_bufs_metadata[cur_buf_idx];
 
   cur_yuv_buf = vipc_server->get_buffer(stream_type);
   cur_camera_buf = &camera_bufs[cur_buf_idx];
 
-  LOGE("HALO");
-  //VisionIpcBufExtra extra = {
-  //  cur_frame_data.frame_id,
-  //  cur_frame_data.timestamp_sof,
-  //  cur_frame_data.timestamp_eof,
-  //};
-  //cur_yuv_buf->set_frame_id(cur_frame_data.frame_id);
-  //cur_yuv_buf->set_frame_id(cur_frame_data.frame_id);
-  vipc_server->send(cur_camera_buf, NULL);
-  //vipc_server->send(cur_yuv_buf, &extra);
+  memcpy(cur_yuv_buf->addr, cur_camera_buf->addr, nv12_frame_size);
 
-  LOGE("HALO");
+  VisionIpcBufExtra extra = {
+    cur_frame_data.frame_id,
+    cur_frame_data.timestamp_sof,
+    cur_frame_data.timestamp_eof,
+  };
+
+  vipc_server->send(cur_yuv_buf, &extra, false);
   return true;
 }
 
@@ -96,11 +89,7 @@ void fill_frame_data(cereal::FrameData::Builder &framed, const FrameMetadata &fr
   framed.setMeasuredGreyFraction(frame_data.measured_grey_fraction);
   framed.setTargetGreyFraction(frame_data.target_grey_fraction);
   framed.setProcessingTime(frame_data.processing_time);
-
-  const float ev = c->cur_ev[frame_data.frame_id % 3];
-  const float perc = util::map_val(ev, c->ci->min_ev, c->ci->max_ev, 0.0f, 100.0f);
-  framed.setExposureValPercent(perc);
-  framed.setSensor(c->ci->image_sensor);
+  framed.setSensor(cereal::FrameData::ImageSensor::OX03C10);
 }
 
 kj::Array<uint8_t> get_raw_frame_image(const CameraBuf *b) {
@@ -243,7 +232,6 @@ void *processing_thread(MultiCameraState *cameras, CameraState *cs, process_thre
 
   uint32_t cnt = 0;
   while (!do_exit) {
-    LOGE("%d", cnt);
     if (!cs->buf.acquire()) continue;
 
     callback(cameras, cs, cnt);
