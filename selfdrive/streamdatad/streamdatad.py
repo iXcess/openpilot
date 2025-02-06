@@ -66,8 +66,24 @@ class Streamer:
   def send_udp_message(self):
     if self.ip:
       self.sm.update()
-      if self.sm['navInstruction'].maneuverPrimaryText:
-        message = self.sm['navInstruction'].as_builder().to_bytes()
+      nav = self.sm['navInstruction']
+      if nav and nav.maneuverPrimaryText:
+        message = msgpack.packb({
+          "maneuverPrimaryText": nav.maneuverPrimaryText,
+          "maneuverSecondaryText": nav.maneuverSecondaryText,
+          "maneuverDistance": nav.maneuverDistance,
+          "maneuverType": nav.maneuverType,
+          "maneuverModifier": nav.maneuverModifier,
+          "distanceRemaining": nav.distanceRemaining,
+          "timeRemaining": nav.timeRemaining,
+          "timeRemainingTypical": nav.timeRemainingTypical,
+          "lanes": [{
+            "directions": lane.directions,
+            "active": lane.active,
+            "activeDirection": lane.activeDirection,
+          } for lane in nav.lanes],
+          "showFull": nav.showFull
+        }, use_bin_type=True)
         self.udp_sock.sendto(message, (self.ip, UDP_PORT))
 
   def send_tcp_message(self):
@@ -135,41 +151,7 @@ class Streamer:
     try:
       message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)
       self.ip = addr[0]  # Update client IP
-
-      try:
-        with log.NavInstruction.from_bytes(message) as nav:
-          print(f"  maneuverPrimaryText: {nav.maneuverPrimaryText}")
-          print(f"  maneuverSecondaryText: {nav.maneuverSecondaryText}")
-          print(f"  maneuverDistance: {nav.maneuverDistance}")
-          print(f"  maneuverType: {nav.maneuverType}")
-          print(f"  maneuverModifier: {nav.maneuverModifier}")
-          print(f"  distanceRemaining: {nav.distanceRemaining}")
-          print(f"  timeRemaining: {nav.timeRemaining}")
-          print(f"  timeRemainingTypical: {nav.timeRemainingTypical}")
-
-          for lane in nav.lanes:
-            print(f"  Lane Active: {lane.active}")
-            active_direction = lane.activeDirection  # This is a Direction enum
-            print(f"  Lane ActiveDirection: {active_direction}")
-            for direction in lane.directions:
-              direction_name = log.NavInstruction.Direction.__dict__.get(direction, "Unknown")
-              print(f"    Direction: {direction_name}")  # Printing direction by name
-
-          print(f"  showFull: {nav.showFull}")
-
-          print(f"  speedLimit: {nav.speedLimit}")
-          speed_limit_sign = nav.speedLimitSign  # This is a SpeedLimitSign enum
-          speed_limit_sign_name = log.NavInstruction.SpeedLimitSign.__dict__.get(speed_limit_sign, "Unknown")
-          print(f"  speedLimitSign: {speed_limit_sign_name}")  # Printing enum value by name
-
-          for maneuver in nav.allManeuvers:
-            print(f"  Maneuver Distance: {maneuver.distance}")
-            print(f"  Maneuver Type: {maneuver.type}")
-            print(f"  Maneuver Modifier: {maneuver.modifier}")
-
-      except Exception as e:
-        print(f"\nSchema error: {e}\nRaw UDP: {message}")
-    except socket.error:
+    except Exception:
       pass
 
   def receive_tcp_message(self):
