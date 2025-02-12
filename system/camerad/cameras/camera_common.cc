@@ -68,6 +68,7 @@ bool CameraBuf::acquire() {
     cur_frame_data.timestamp_eof,
   };
 
+  cur_yuv_buf->set_frame_id(cur_frame_data.frame_id);
   vipc_server->send(cur_yuv_buf, &extra, false);
   return true;
 }

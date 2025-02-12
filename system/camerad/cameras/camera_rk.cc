@@ -104,7 +104,6 @@ void CameraState::dequeue_buf() {
   buf.camera_bufs_metadata[v4l_buf.index].frame_id = v4l_buf.sequence;
   buf.camera_bufs_metadata[v4l_buf.index].timestamp_sof = static_cast<uint64_t>(v4l_buf.timestamp.tv_sec * 1000000000 + v4l_buf.timestamp.tv_usec * 1000);
   buf.camera_bufs_metadata[v4l_buf.index].timestamp_eof = static_cast<uint64_t>(v4l_buf.timestamp.tv_sec * 1000000000 + v4l_buf.timestamp.tv_usec * 1000);
-  LOGE("timestamp %lu", buf.camera_bufs_metadata[v4l_buf.index].timestamp_sof);
   // immediately queue after dequeing the buffer
   assert(ioctl(video_fd, VIDIOC_QBUF, &v4l_buf) >= 0);
 }
@@ -118,8 +117,24 @@ void cameras_init(VisionIpcServer *v, MultiCameraState *s, cl_device_id device_i
 }
 
 void cameras_open(MultiCameraState *s) {
-  LOG("-- Opening devices");
+  LOG("-- Setting camera ctrls");
 
+  // set horizontal flip = 1 to all cameras, it's on subdev 2,7,12
+  for (int i = 2; i <= 12; i+=5) {
+    char device[32];
+    snprintf(device, sizeof(device), "/dev/v4l-subdev%d", i);
+    int ctrl_fd = open(device, O_RDWR);
+    assert(ctrl_fd >= 0);
+
+    struct v4l2_control ctrl;
+    ctrl.id = V4L2_CID_HFLIP;
+    ctrl.value = 1;
+
+    assert(ioctl(ctrl_fd, VIDIOC_S_CTRL, &ctrl) >= 0);
+    close(ctrl_fd);
+  }
+
+  LOG("-- Opening devices");
   s->road_cam.camera_open(s, 2, !env_disable_road);
   LOGD("road camera opened");
   s->wide_road_cam.camera_open(s, 1, !env_disable_wide_road);
