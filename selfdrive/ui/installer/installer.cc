@@ -183,7 +183,7 @@ void Installer::cloneFinished(int exitCode, QProcess::ExitStatus exitStatus) {
   std::map<std::string, std::string> params = {
     {"SshEnabled", "1"},
     {"RecordFrontLock", "1"},
-    {"GithubSshKeys", SSH_KEYS},
+    // {"GithubSshKeys", SSH_KEYS},
   };
   for (const auto& [key, value] : params) {
     std::ofstream param;
