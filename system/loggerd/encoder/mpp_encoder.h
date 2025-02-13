@@ -10,6 +10,9 @@
 #include "system/loggerd/encoder/encoder.h"
 #include "system/loggerd/loggerd.h"
 
+#include "rga/rga.h"
+#include "rga/im2d.h"
+
 class MppEncoder : public VideoEncoder {
 public:
   MppEncoder(const EncoderInfo &encoder_info, int in_width, int in_height);
@@ -22,7 +25,12 @@ private:
   int segment_num = -1;
   int counter = 0;
   bool is_open = false;
+  bool is_downscale = false;
   FILE *file;
+
+  int alw, alh;
+
+  rga_buffer_t src, dst;
 
   MppCtx mpp_ctx;
   MppApi *mpp_mpi;
@@ -30,7 +38,6 @@ private:
   MppPacket packet;
   MppEncCfg cfg;
   MppBuffer mpp_buf;
-  //MppBufferGroup buf_grp;
 
-  std::vector<uint8_t> convert_buf;
+  void *downscale_buf;
 };
