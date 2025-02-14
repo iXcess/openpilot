@@ -26,7 +26,6 @@ private:
   int counter = 0;
   bool is_open = false;
   bool is_downscale = false;
-  FILE *file;
 
   int alw, alh;
 
