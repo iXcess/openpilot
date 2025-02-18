@@ -72,6 +72,19 @@ void CameraState::camera_open(MultiCameraState *multi_cam_state_, int camera_num
   enabled = enabled_;
   if (!enabled) return;
 
+  LOG("-- Setting camera ctrls");
+  char device[32];
+
+  // ctrl is at subdev 2,7,12
+  snprintf(device, sizeof(device), "/dev/v4l-subdev%d", camera_num * 5 + 2);
+  ctrl_fd = open(device, O_RDWR);
+  assert(ctrl_fd >= 0);
+
+  // set horizontal flip = 1 to all cameras
+  ctrl.id = V4L2_CID_HFLIP;
+  ctrl.value = 1;
+  assert(ioctl(ctrl_fd, VIDIOC_S_CTRL, &ctrl) >= 0);
+
   video_fd = open_v4l_by_name_and_index("rkisp_mainpath", camera_num);
   assert(video_fd >= 0);
 }
@@ -89,6 +102,11 @@ void CameraState::stream_start() {
 }
 
 void CameraState::dequeue_buf() {
+  // TODO: move to another class
+  ctrl.id = V4L2_CID_EXPOSURE;
+  assert(ioctl(ctrl_fd, VIDIOC_G_CTRL, &ctrl) >= 0);
+  buf.camera_bufs_metadata[v4l_buf.index].integ_lines = ctrl.value;
+
   assert(ioctl(video_fd, VIDIOC_DQBUF, &v4l_buf) >= 0);
   // queue the index number of the v4l buffer that has just been populated
   buf.queue(v4l_buf.index);
@@ -109,23 +127,6 @@ void cameras_init(VisionIpcServer *v, MultiCameraState *s, cl_device_id device_i
 }
 
 void cameras_open(MultiCameraState *s) {
-  LOG("-- Setting camera ctrls");
-
-  // set horizontal flip = 1 to all cameras, it's on subdev 2,7,12
-  for (int i = 2; i <= 12; i+=5) {
-    char device[32];
-    snprintf(device, sizeof(device), "/dev/v4l-subdev%d", i);
-    int ctrl_fd = open(device, O_RDWR);
-    assert(ctrl_fd >= 0);
-
-    struct v4l2_control ctrl;
-    ctrl.id = V4L2_CID_HFLIP;
-    ctrl.value = 1;
-
-    assert(ioctl(ctrl_fd, VIDIOC_S_CTRL, &ctrl) >= 0);
-    close(ctrl_fd);
-  }
-
   LOG("-- Opening devices");
   s->road_cam.camera_open(s, 2, !env_disable_road);
   LOGD("road camera opened");
@@ -142,6 +143,9 @@ void CameraState::camera_close() {
   for(int i = 0; i < FRAME_BUF_COUNT; i++) {
     munmap(buf.camera_bufs[i].addr, buf.camera_bufs[i].mmap_len);
   }
+
+  close(ctrl_fd);
+  close(video_fd);
 
   LOGD("destroyed session %d", camera_num);
 }
@@ -211,15 +215,12 @@ void cameras_run(MultiCameraState *s) {
         switch (i) {
           case 0:
             s->driver_cam.dequeue_buf();
-            LOGE("dcam dqbuf");
             break;
           case 1:
             s->road_cam.dequeue_buf();
-            LOGE("lcam dqbuf");
             break;
           case 2:
             s->wide_road_cam.dequeue_buf();
-            LOGE("ecam dqbuf");
             break;
         }
       }
