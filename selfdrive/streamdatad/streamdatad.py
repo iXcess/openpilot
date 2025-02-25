@@ -1,73 +1,57 @@
-import subprocess
-import time
+from pydbus import SystemBus
+from gi.repository import GLib
+from dbus.mainloop.glib import DBusGMainLoop
 
 class BLE:
-  def __init__(self):
-    self.device_name = None
-    self.adapter = self.get_adapter()
+    def __init__(self):
+        self.device_name = None
 
-  def run_command(self, cmd):
-    """Run a shell command and return the output."""
-    process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    return process.stdout.strip(), process.stderr.strip()
+    def get_mac_address(self):
+        # Fetch the MAC address of the first available Bluetooth adapter
+        bus = SystemBus()
+        adapter = bus.get("org.bluez", "/org/bluez/hci0")
+        # MAC address is part of the Adapter1 interface properties
+        return adapter.Address
 
-  def get_adapter(self):
-    """Get the Bluetooth adapter (e.g., hci0)."""
-    stdout, _ = self.run_command("sudo hciconfig")
-    return stdout.splitlines()[0].split(":")[0] if stdout else "hci0"
+    def make_ble_discoverable(self):
+        if self.device_name is None:
+            # Get the MAC address and format the name
+            mac_address = self.get_mac_address()
+            last_4_mac = mac_address.replace(":", "")[-4:].upper()  # Last 4 characters (no colons)
+            self.device_name = f"KommuAssist {last_4_mac}"
 
-  def get_mac_address(self):
-    """Retrieve the MAC address of the adapter."""
-    stdout, _ = self.run_command(f"sudo hciconfig {self.adapter} | grep 'BD Address'")
-    return stdout.split(" ")[2] if stdout else None
+        # Get the Bluetooth adapter
+        bus = SystemBus()
+        adapter = bus.get("org.bluez", "/org/bluez/hci0")
 
-  def set_device_alias(self):
-    """Set the Bluetooth device name with the last 4 MAC characters."""
-    mac_address = self.get_mac_address()
-    if mac_address:
-      last_4_mac = mac_address.replace(":", "")[-4:].upper()
-      self.device_name = f"KommuAssist {last_4_mac}"  # Set the device name dynamically
-      self.run_command(f"sudo hciconfig {self.adapter} name '{self.device_name}'")
-      print(f"Device alias set to: {self.device_name}")
-    else:
-      print("Failed to retrieve MAC address.")
+        # Enable Bluetooth adapter and set the properties
+        adapter.Powered = True
+        adapter.Discoverable = True
+        adapter.Pairable = True
+        adapter.AuthRequired = False  # Disable authentication for pairing
+        adapter.Alias = self.device_name  # Use the formatted name
 
-  def clear_paired_devices(self):
-    """Clear all paired devices."""
-    stdout, _ = self.run_command("sudo bluetoothctl paired-devices")
-    devices = stdout.splitlines()
-    for device in devices:
-      if device.strip():  # Ensure the line isn't empty
-        device_mac = device.split(" ")[1]  # The second part of the line is the MAC address
-        self.run_command(f"sudo bluetoothctl remove {device_mac}")
-
-  def configure_bluetoothctl(self):
-    """Configure Bluetooth to automatically accept pairings and start advertising."""
-    commands = [
-      "sudo systemctl restart bluetooth",  # Restart Bluetooth service
-      "sudo bluetoothctl power on",
-      "sudo bluetoothctl agent NoInputNoOutput",  # Automatically accepts pairing requests without a PIN
-      "sudo bluetoothctl default-agent",
-      "sudo bluetoothctl discoverable on",
-      "sudo bluetoothctl pairable on",
-      "sudo bluetoothctl advertise on",  # Start advertising
-    ]
-    for cmd in commands:
-      self.run_command(cmd)
-
-  def start_ble(self):
-    """Run all setup steps to make BLE pairing work without a PIN."""
-    self.clear_paired_devices()  # Clear all paired devices before starting
-    self.set_device_alias()  # Ensure the name is set before starting
-    self.configure_bluetoothctl()  # Configure Bluetooth
-
-    while True:
-      time.sleep(10)
+        # Get the LE Advertising Manager and register the advertisement
+        ad_manager = bus.get("org.bluez", "/org/bluez/hci0")
+        try:
+            ad_manager.RegisterAdvertisement("/org/bluez/advertisement", {})
+            print("BLE advertising started")
+        except Exception as e:
+            print("Failed to start BLE advertising:", e)
 
 def main():
-  ble_setup = BLE()
-  ble_setup.start_ble()
+    # Create a BLE instance
+    ble_device = BLE()
+
+    # Start BLE advertising with dynamic name based on MAC address
+    ble_device.make_ble_discoverable()
+
+    # Main loop to keep the script running
+    DBusGMainLoop(set_as_default=True)
+    loop = GLib.MainLoop()
+    print(f"Bluetooth device '{ble_device.device_name}' is discoverable as a BLE peripheral...")
+    loop.run()
 
 if __name__ == "__main__":
-  main()
+    main()
 
