@@ -31,7 +31,6 @@ class Streamer:
   def __init__(self, sm=None):
     self.local_ip = get_wlan_ip()
     self.ip = None
-    self.settingsOpen = False
     self.requestInfo = False
     self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -99,30 +98,28 @@ class Streamer:
         # TODO include bukapilot changes in selfdrive/updated.py
         sett['updateStatus'] = params.get("UpdaterState") or ''
 
-        settings_open = True
         sett['isOffroad'] = params.get_bool("IsOffroad")
-        if settings_open:
-          sett['enableBukapilot'] = params.get_bool("OpenpilotEnabledToggle")
-          sett['quietMode'] = params.get_bool("QuietMode")
-          sett['enableAssistedLaneChange'] = params.get_bool("IsAlcEnabled")
-          sett['enableLaneDepartureWarning'] = params.get_bool("IsLdwEnabled")
-          sett['uploadVideoWiFiOnly'] = params.get_bool("LogVideoWifiOnly")
-          sett['apn'] = params.get("GsmApn") or ''
-          sett['enableRoaming'] = params.get_bool("GsmRoaming")
-          sett['driverPersonality'] = params.get("LongitudinalPersonality")
-          sett['useMetricSystem'] = params.get_bool("IsMetric")
-          sett['enableSSH'] = params.get_bool("SshEnabled")
-          sett['experimentalModel'] = params.get_bool("ExperimentalMode")
-          sett['recordUploadDriverCamera'] = params.get_bool("RecordFront")
-          sett['stopDistanceOffset'] = float(params.get("StoppingDistanceOffset") or 0)
-          sett['pathSkewOffset'] = float(params.get("DrivePathOffset") or 0)
-          sett['devicePowerOffTime'] = float(params.get("PowerSaverEntryDuration") or 0)
-          # TODO add code for change branch
-          sett['changeBranchStatus'] = params.get("ChangeBranchStatus") or ''
-          sett['featurePackage'] = params.get("FeaturesPackage") or ''
-          sett['fixFingerprint'] = params.get("FixFingerprint") or ''
+        sett['enableBukapilot'] = params.get_bool("OpenpilotEnabledToggle")
+        sett['quietMode'] = params.get_bool("QuietMode")
+        sett['enableAssistedLaneChange'] = params.get_bool("IsAlcEnabled")
+        sett['enableLaneDepartureWarning'] = params.get_bool("IsLdwEnabled")
+        sett['uploadVideoWiFiOnly'] = params.get_bool("LogVideoWifiOnly")
+        sett['apn'] = params.get("GsmApn") or ''
+        sett['enableRoaming'] = params.get_bool("GsmRoaming")
+        sett['driverPersonality'] = params.get("LongitudinalPersonality")
+        sett['useMetricSystem'] = params.get_bool("IsMetric")
+        sett['enableSSH'] = params.get_bool("SshEnabled")
+        sett['experimentalModel'] = params.get_bool("ExperimentalMode")
+        sett['recordUploadDriverCamera'] = params.get_bool("RecordFront")
+        sett['stopDistanceOffset'] = float(params.get("StoppingDistanceOffset") or 0)
+        sett['pathSkewOffset'] = float(params.get("DrivePathOffset") or 0)
+        sett['devicePowerOffTime'] = float(params.get("PowerSaverEntryDuration") or 0)
+        # TODO add code for change branch
+        sett['changeBranchStatus'] = params.get("ChangeBranchStatus") or ''
+        sett['featurePackage'] = params.get("FeaturesPackage") or ''
+        sett['fixFingerprint'] = params.get("FixFingerprint") or ''
 
-        if self.requestInfo and not self.settingsOpen:
+        if self.requestInfo:
           sett['dongleID'] = params.get("DongleId")
           sett['serial'] = params.get("HardwareSerial") or ''
           sett['ipAddress'] = get_wlan_ip()
@@ -134,7 +131,6 @@ class Streamer:
         self.tcp_conn.sendall(msgpack.packb(sett))
         # Reset values after sending
         self.requestInfo = False
-        self.settingsOpen = False
 
       except socket.error:
         self.tcp_conn = None  # Reset connection on error
@@ -162,10 +158,9 @@ class Streamer:
           try:
             settings = msgpack.unpackb(message)
             offroad = params.get_bool("IsOffroad")
-            self.settingsOpen = settings['settingsOpen']
-            self.requestInfo = settings['requestDeviceInfo'] and not settings['settingsOpen']
+            self.requestInfo = settings['requestDeviceInfo']
 
-            if offroad and settings['settingsOpen'] and not settings['requestDeviceInfo']:
+            if offroad and not self.requestInfo:
               print("Received settings:")
               print(f"EnableBukapilot: {settings['enableBukapilot']}")
               print(f"QuietMode: {settings['quietMode']}")
