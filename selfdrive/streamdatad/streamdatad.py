@@ -94,7 +94,7 @@ class Streamer:
         sett['alerts'] = (str(self.sm['controlsState'].alertText1) + "\n" + str(self.sm['controlsState'].alertText2))
         sett['remainingDataUpload'] = self.remainingDataUpload()
         # TODO send uploadStatus in selfdrive/loggerd/uploader.py
-        sett['gitCommit'] = get_commit()
+        sett['gitCommit'] = get_commit()[:7]
         # TODO include bukapilot changes in selfdrive/updated.py
         sett['updateStatus'] = params.get("UpdaterState") or ''
 
@@ -120,6 +120,7 @@ class Streamer:
         sett['fixFingerprint'] = params.get("FixFingerprint") or ''
 
         if self.requestInfo:
+          sett['requestDeviceInfo'] = True
           sett['dongleID'] = params.get("DongleId")
           sett['serial'] = params.get("HardwareSerial") or ''
           sett['ipAddress'] = get_wlan_ip()
@@ -127,10 +128,9 @@ class Streamer:
           sett['currentVersion'] = get_version()
           sett['currentBranch'] = get_short_branch()
           sett['currentChangelog'] = params.get("UpdaterCurrentReleaseNotes") or ''
+          self.requestInfo = False
 
         self.tcp_conn.sendall(msgpack.packb(sett))
-        # Reset values after sending
-        self.requestInfo = False
 
       except socket.error:
         self.tcp_conn = None  # Reset connection on error
