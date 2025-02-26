@@ -9,6 +9,7 @@ import cereal.messaging as messaging
 from cereal import log
 from openpilot.system.version import get_version, get_commit, get_short_branch
 from openpilot.common.params import Params
+from openpilot.system.hardware import HARDWARE
 
 BUFFER_SIZE = 1024
 UDP_PORT = 5006
@@ -126,6 +127,7 @@ class Streamer:
           sett['ipAddress'] = get_wlan_ip()
           sett['hostname'] = socket.gethostname()
           sett['currentVersion'] = get_version()
+          sett['osVersion'] = HARDWARE.get_os_version()
           sett['currentBranch'] = get_short_branch()
           sett['currentChangelog'] = params.get("UpdaterCurrentReleaseNotes") or ''
           self.requestInfo = False
