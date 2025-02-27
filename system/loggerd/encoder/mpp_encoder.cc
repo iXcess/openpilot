@@ -39,9 +39,9 @@ MppEncoder::~MppEncoder() {
 
 void MppEncoder::encoder_open(const char* path) {
     assert(mpp_create(&mpp_ctx, &mpp_mpi) == MPP_OK);
-    LOGD("opened [%d %d %d %d] fps %d %s bitrate %d encoder %hu", in_width, in_height,
+    LOGD("opened [%d %d %d %d] fps %d %s bitrate %d", in_width, in_height,
         out_width, out_height, encoder_info.fps,
-        encoder_info.filename, encoder_info.bitrate, encoder_info.encode_type);
+        encoder_info.filename, encoder_info.bitrate);
 
     if (encoder_info.encode_type == cereal::EncodeIndex::Type::QCAMERA_H264) {
       assert(mpp_init(mpp_ctx, MPP_CTX_ENC, MPP_VIDEO_CodingAVC) == MPP_OK);
