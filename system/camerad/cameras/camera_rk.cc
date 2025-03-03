@@ -80,8 +80,12 @@ void CameraState::camera_open(MultiCameraState *multi_cam_state_, int camera_num
   ctrl_fd = open(device, O_RDWR);
   assert(ctrl_fd >= 0);
 
-  // set horizontal flip = 1 to all cameras
+  // set vflip = 1 to all cameras
   ctrl.id = V4L2_CID_HFLIP;
+  ctrl.value = 0;
+  assert(ioctl(ctrl_fd, VIDIOC_S_CTRL, &ctrl) >= 0);
+  // set vflip = 1 to all cameras
+  ctrl.id = V4L2_CID_VFLIP;
   ctrl.value = 1;
   assert(ioctl(ctrl_fd, VIDIOC_S_CTRL, &ctrl) >= 0);
 
@@ -128,10 +132,10 @@ void cameras_init(VisionIpcServer *v, MultiCameraState *s, cl_device_id device_i
 
 void cameras_open(MultiCameraState *s) {
   LOG("-- Opening devices");
-  s->road_cam.camera_open(s, 2, !env_disable_road);
-  LOGD("road camera opened");
-  s->wide_road_cam.camera_open(s, 1, !env_disable_wide_road);
+  s->wide_road_cam.camera_open(s, 2, !env_disable_wide_road);
   LOGD("wide road camera opened");
+  s->road_cam.camera_open(s, 1, !env_disable_road);
+  LOGD("road camera opened");
   s->driver_cam.camera_open(s, 0, !env_disable_driver);
   LOGD("driver camera opened");
  }
@@ -215,12 +219,15 @@ void cameras_run(MultiCameraState *s) {
         switch (i) {
           case 0:
             s->driver_cam.dequeue_buf();
+            LOGD("dcam dequeue");
             break;
           case 1:
             s->road_cam.dequeue_buf();
+            LOGD("lcam dequeue");
             break;
           case 2:
             s->wide_road_cam.dequeue_buf();
+            LOGD("ecam dequeue");
             break;
         }
       }
