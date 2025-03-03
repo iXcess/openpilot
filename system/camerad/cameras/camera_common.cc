@@ -6,6 +6,7 @@
 
 #include "third_party/libyuv/include/libyuv.h"
 #include <jpeglib.h>
+#include <signal.h>
 
 #include "common/clutil.h"
 #include "common/swaglog.h"
@@ -50,6 +51,9 @@ CameraBuf::~CameraBuf() {
   for (int i = 0; i < frame_buf_count; i++) {
     camera_bufs[i].free();
   }
+
+  // needed due to (maybe) buggy opencl
+  kill(getpid(), SIGKILL);
 }
 
 bool CameraBuf::acquire() {
