@@ -1,9 +1,5 @@
 import socket
-import fcntl
-import struct
-import os
 import msgpack
-
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 from cereal import log
@@ -16,21 +12,9 @@ UDP_PORT = 5006
 TCP_PORT = 5007
 params = Params()
 
-def get_wlan_ip():
-  for iface in os.listdir('/sys/class/net/'):
-    if iface.startswith('wl'):
-      try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        ip = socket.inet_ntoa(fcntl.ioctl(
-          s.fileno(), 0x8915, struct.pack('256s', bytes(iface[:15], 'utf-8'))
-        )[20:24])
-        return ip
-      except IOError:
-        pass
-
 class Streamer:
   def __init__(self, sm=None):
-    self.local_ip = get_wlan_ip()
+    self.local_ip = "0.0.0.0"  # Bind to all network interfaces, allowing connections from any available network.
     self.ip = None
     self.requestInfo = False
     self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -124,7 +108,6 @@ class Streamer:
           sett['requestDeviceInfo'] = True
           sett['dongleID'] = params.get("DongleId")
           sett['serial'] = params.get("HardwareSerial") or ''
-          sett['ipAddress'] = get_wlan_ip()
           sett['hostname'] = socket.gethostname()
           sett['currentVersion'] = get_version()
           sett['osVersion'] = HARDWARE.get_os_version()
