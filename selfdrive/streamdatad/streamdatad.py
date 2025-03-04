@@ -91,7 +91,7 @@ class Streamer:
         sett['uploadVideoWiFiOnly'] = params.get_bool("LogVideoWifiOnly")
         sett['apn'] = params.get("GsmApn") or ''
         sett['enableRoaming'] = params.get_bool("GsmRoaming")
-        sett['driverPersonality'] = params.get("LongitudinalPersonality")
+        sett['driverPersonality'] = params.get("LongitudinalPersonality").decode('utf-8') or ''
         sett['useMetricSystem'] = params.get_bool("IsMetric")
         sett['enableSSH'] = params.get_bool("SshEnabled")
         sett['experimentalModel'] = params.get_bool("ExperimentalMode")
@@ -106,8 +106,8 @@ class Streamer:
 
         if self.requestInfo:
           sett['requestDeviceInfo'] = True
-          sett['dongleID'] = params.get("DongleId")
-          sett['serial'] = params.get("HardwareSerial") or ''
+          sett['dongleID'] = params.get("DongleId").decode('utf-8') or ''
+          sett['serial'] = params.get("HardwareSerial").decode('utf-8') or ''
           sett['hostname'] = socket.gethostname()
           sett['currentVersion'] = get_version()
           sett['osVersion'] = HARDWARE.get_os_version()
