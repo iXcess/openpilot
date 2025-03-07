@@ -115,11 +115,9 @@ class Ka2(HardwareBase):
   def get_device_type(self):
     return "ka2"
 
+  # ka2 sound card is always online
   def get_sound_card_online(self):
-    if os.path.isfile('/proc/asound/card0/state'):
-      with open('/proc/asound/card0/state') as f:
-        return f.read().strip() == 'ONLINE'
-    return False
+    return True
 
   def reboot(self, reason=None):
     subprocess.check_output(["sudo", "reboot"])
