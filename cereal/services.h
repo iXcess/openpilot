@@ -79,7 +79,6 @@ static std::map<std::string, service> services = {
   { "customReservedRawData0", {"customReservedRawData0", 8073, true, 0, -1}},
   { "customReservedRawData1", {"customReservedRawData1", 8074, true, 0, -1}},
   { "customReservedRawData2", {"customReservedRawData2", 8075, true, 0, -1}},
-  { "settings", {"settings", 8076, true, 0, 1}},
 };
 #endif
 
