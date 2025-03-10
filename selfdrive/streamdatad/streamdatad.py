@@ -21,7 +21,7 @@ class Streamer:
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
     self.sm = sm if sm \
-      else messaging.SubMaster(['navInstruction', 'deviceState', 'peripheralState',\
+      else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
       'controlsState', 'uploaderState'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
@@ -50,25 +50,9 @@ class Streamer:
   def send_udp_message(self):
     if self.ip:
       self.sm.update()
-      nav = self.sm['navInstruction']
-      if nav and nav.maneuverPrimaryText:
-        message = msgpack.packb({
-          "maneuverPrimaryText": nav.maneuverPrimaryText,
-          "maneuverSecondaryText": nav.maneuverSecondaryText,
-          "maneuverDistance": nav.maneuverDistance,
-          "maneuverType": nav.maneuverType,
-          "maneuverModifier": nav.maneuverModifier,
-          "distanceRemaining": nav.distanceRemaining,
-          "timeRemaining": nav.timeRemaining,
-          "timeRemainingTypical": nav.timeRemainingTypical,
-          "lanes": [{
-            "directions": lane.directions,
-            "active": lane.active,
-            "activeDirection": lane.activeDirection,
-          } for lane in nav.lanes],
-          "showFull": nav.showFull
-        }, use_bin_type=True)
-        self.udp_sock.sendto(message, (self.ip, UDP_PORT))
+      modelV2 = self.sm['modelV2'].to_dict()
+      message = msgpack.packb(modelV2)
+      self.udp_sock.sendto(message, (self.ip, UDP_PORT))
 
   def send_tcp_message(self):
     if self.tcp_conn:
