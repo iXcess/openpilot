@@ -49,7 +49,7 @@ class Streamer:
 
   def send_udp_message(self):
     if self.ip:
-      self.sm.update()
+      self.sm.update(10) # update every 10 ms
       modelV2 = self.sm['modelV2'].to_dict()
       message = msgpack.packb(modelV2)
       self.udp_sock.sendto(message, (self.ip, UDP_PORT))
@@ -57,6 +57,7 @@ class Streamer:
   def send_tcp_message(self):
     if self.tcp_conn:
       try:
+        self.sm.update(10)
         sett = {}
         sett['connectivityStatus'] = str(self.sm['deviceState'].networkType)
         sett['deviceStatus'] = self.deviceStatus()
