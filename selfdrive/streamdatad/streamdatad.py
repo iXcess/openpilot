@@ -47,11 +47,39 @@ class Streamer:
     self.tcp_sock.listen(1)
     self.tcp_sock.setblocking(False)
 
+  def add_items_to_send_dict(model_dict, key_name, new_prefix, send_dict):
+    items = model_dict.get(key_name)
+    if items:
+      send_dict.update({f"{new_prefix}{index + 1}": item for index, item in enumerate(items)})
+
   def send_udp_message(self):
     if self.ip:
       self.sm.update(10) # update every 10 ms
       modelV2 = self.sm['modelV2'].to_dict()
-      message = msgpack.packb(modelV2)
+
+      keys_to_check = [
+        "confidence",
+        "frameAge",
+        "frameDropPerc",
+        "frameId",
+        "frameIdExtra",
+        "acceleration",
+        "position",
+        "roadEdgeStds",
+        "laneLineProbs",
+        "laneLineStds",
+      ]
+
+      send_dict = {}
+
+      for key in keys_to_check:
+        send_dict[key] = modelV2.get(key, None)
+
+      self.add_items_to_send_dict(modelV2, "laneLines", "laneLine", send_dict)
+      self.add_items_to_send_dict(modelV2, "leadsV3", "lead", send_dict)
+      self.add_items_to_send_dict(modelV2, "roadEdges", "roadEdge", send_dict)
+
+      message = msgpack.packb(send_dict)
       self.udp_sock.sendto(message, (self.ip, UDP_PORT))
 
   def send_tcp_message(self):
