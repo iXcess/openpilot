@@ -11,6 +11,7 @@
 
 ModelFrame::ModelFrame(cl_device_id device_id, cl_context context) {
   input_frames = std::make_unique<float[]>(buf_size);
+  nhwc_frames = std::make_unique<float[]>(buf_size);
 
   q = CL_CHECK_ERR(clCreateCommandQueue(context, device_id, 0, &err));
   y_cl = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, MODEL_WIDTH * MODEL_HEIGHT, NULL, &err));
@@ -18,8 +19,12 @@ ModelFrame::ModelFrame(cl_device_id device_id, cl_context context) {
   v_cl = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, (MODEL_WIDTH / 2) * (MODEL_HEIGHT / 2), NULL, &err));
   net_input_cl = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, MODEL_FRAME_SIZE * sizeof(float), NULL, &err));
 
+  nchw = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, buf_size * sizeof(float), input_frames.get(), &err));
+  nhwc = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, buf_size * sizeof(float), NULL, &err));
+
   transform_init(&transform, context, device_id);
   loadyuv_init(&loadyuv, context, device_id, MODEL_WIDTH, MODEL_HEIGHT);
+  transpose_init(&transpose, context, device_id);
 }
 
 float* ModelFrame::prepare(cl_mem yuv_cl, int frame_width, int frame_height, int frame_stride, int frame_uv_offset, const mat3 &projection, cl_mem *output) {
@@ -32,8 +37,13 @@ float* ModelFrame::prepare(cl_mem yuv_cl, int frame_width, int frame_height, int
 
     std::memmove(&input_frames[0], &input_frames[MODEL_FRAME_SIZE], sizeof(float) * MODEL_FRAME_SIZE);
     CL_CHECK(clEnqueueReadBuffer(q, net_input_cl, CL_TRUE, 0, MODEL_FRAME_SIZE * sizeof(float), &input_frames[MODEL_FRAME_SIZE], 0, nullptr, nullptr));
+
+    CL_CHECK(clEnqueueWriteBuffer(q, nchw, CL_TRUE, 0, buf_size * sizeof(float), input_frames.get(), 0, nullptr, nullptr));
+    transpose_queue(&transpose, q, nchw, nhwc);
+    CL_CHECK(clEnqueueReadBuffer(q, nhwc, CL_TRUE, 0, buf_size * sizeof(float), &nhwc_frames[0], 0, nullptr, nullptr));
+
     clFinish(q);
-    return &input_frames[0];
+    return &nhwc_frames[0];
   } else {
     loadyuv_queue(&loadyuv, q, y_cl, u_cl, v_cl, *output, true);
     // NOTE: Since thneed is using a different command queue, this clFinish is needed to ensure the image is ready.
@@ -49,6 +59,7 @@ ModelFrame::~ModelFrame() {
   CL_CHECK(clReleaseMemObject(v_cl));
   CL_CHECK(clReleaseMemObject(u_cl));
   CL_CHECK(clReleaseMemObject(y_cl));
+  CL_CHECK(clReleaseMemObject(nchw));
   CL_CHECK(clReleaseCommandQueue(q));
 }
 

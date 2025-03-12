@@ -9,6 +9,7 @@ common_src = [
   "models/commonmodel.cc",
   "transforms/loadyuv.cc",
   "transforms/transform.cc",
+  "transforms/transpose.cc",
 ]
 
 if device == 'TICI':
@@ -39,7 +40,9 @@ else:
   libs += ['OpenCL']
 
 # Set path definitions
-for pathdef, fn in {'TRANSFORM': 'transforms/transform.cl', 'LOADYUV': 'transforms/loadyuv.cl'}.items():
+for pathdef, fn in {'TRANSFORM': 'transforms/transform.cl', \
+                    'LOADYUV': 'transforms/loadyuv.cl', \
+                    'TRANSPOSE': 'transforms/transpose.cl'}.items():
   for xenv in (lenv, lenvCython):
     xenv['CXXFLAGS'].append(f'-D{pathdef}_PATH=\\"{File(fn).abspath}\\"')
 
