@@ -47,39 +47,32 @@ class Streamer:
     self.tcp_sock.listen(1)
     self.tcp_sock.setblocking(False)
 
-  def add_items_to_send_dict(model_dict, key_name, new_prefix, send_dict):
-    items = model_dict.get(key_name)
-    if items:
-      send_dict.update({f"{new_prefix}{index + 1}": item for index, item in enumerate(items)})
+  def flatten_model_data(self, model_dict):
+    # Clean up disengagePredictions inside 'meta'
+    if (meta := model_dict.get("meta")) and isinstance(meta, dict):
+      meta.pop("disengagePredictions", None)
+
+    # Define the special handling keys and their prefixes
+    special_keys = {
+      "laneLines": "laneLine",
+      "leadsV3": "lead",
+      "roadEdges": "roadEdge"
+    }
+
+    # Modify model_dict directly for efficiency
+    for key, prefix in special_keys.items():
+      if (value := model_dict.pop(key, None)) and isinstance(value, list):
+        model_dict.update((f"{prefix}{i}", item) for i, item in enumerate(value, 1))
+
+    return model_dict
 
   def send_udp_message(self):
     if self.ip:
       self.sm.update(10) # update every 10 ms
       modelV2 = self.sm['modelV2'].to_dict()
 
-      keys_to_check = [
-        "confidence",
-        "frameAge",
-        "frameDropPerc",
-        "frameId",
-        "frameIdExtra",
-        "acceleration",
-        "position",
-        "roadEdgeStds",
-        "laneLineProbs",
-        "laneLineStds",
-      ]
-
-      send_dict = {}
-
-      for key in keys_to_check:
-        send_dict[key] = modelV2.get(key, None)
-
-      self.add_items_to_send_dict(modelV2, "laneLines", "laneLine", send_dict)
-      self.add_items_to_send_dict(modelV2, "leadsV3", "lead", send_dict)
-      self.add_items_to_send_dict(modelV2, "roadEdges", "roadEdge", send_dict)
-
-      message = msgpack.packb(send_dict)
+      # Pack and send
+      message = msgpack.packb(self.flatten_model_data(modelV2))
       self.udp_sock.sendto(message, (self.ip, UDP_PORT))
 
   def send_tcp_message(self):
