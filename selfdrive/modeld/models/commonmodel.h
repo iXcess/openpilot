@@ -16,7 +16,6 @@
 #include "cereal/messaging/messaging.h"
 #include "selfdrive/modeld/transforms/loadyuv.h"
 #include "selfdrive/modeld/transforms/transform.h"
-#include "selfdrive/modeld/transforms/transpose.h"
 
 const bool send_raw_pred = getenv("SEND_RAW_PRED") != NULL;
 
@@ -41,9 +40,8 @@ public:
 
 private:
   Transform transform;
-  Transpose transpose;
   LoadYUVState loadyuv;
   cl_command_queue q;
-  cl_mem y_cl, u_cl, v_cl, net_input_cl, nchw, nhwc;
-  std::unique_ptr<float[]> input_frames, nhwc_frames;
+  cl_mem y_cl, u_cl, v_cl, net_input_cl;
+  std::unique_ptr<float[]> input_frames;
 };
