@@ -408,12 +408,15 @@ class Ka2(HardwareBase):
 
   def configure_modem(self):
     sim_id = self.get_sim_info().get('sim_id', '')
+    mcc_mnc = self.get_sim_info().get('mcc_mnc', '')
 
     modem = self.get_modem()
     try:
       manufacturer = str(modem.Get(MM_MODEM, 'Manufacturer', dbus_interface=DBUS_PROPS, timeout=TIMEOUT))
     except Exception:
       manufacturer = None
+
+    os.system("bash /usr/kommu/lte/wwan0-setup.sh " + mcc_mnc)
 
     cmds = [
       # configure modem as data-centric
