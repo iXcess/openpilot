@@ -77,13 +77,12 @@ class Streamer:
       radarState = self.sm['radarState'].to_dict()
       liveCalibration = self.sm['liveCalibration'].to_dict()
       carParams = self.sm['carParams'].to_dict()
-      brand = next((d['brand'] for d in carParams.pop('carFw', []) if 'brand' in d), None)
+      carParams.pop('carFw', None)
 
       data = self.flatten_model_data(modelV2)
       data.update(radarState)
       data.update(liveCalibration)
       data.update(carParams)
-      data['brand'] = brand
 
       # Pack and send
       message = msgpack.packb(data)
