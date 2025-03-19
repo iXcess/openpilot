@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import socket
 import msgpack
 from openpilot.common.realtime import Ratekeeper
@@ -14,6 +16,7 @@ params = Params()
 
 class Streamer:
   def __init__(self, sm=None):
+    #self.local_ip = "192.168.100.1"
     self.local_ip = "0.0.0.0"  # Bind to all network interfaces, allowing connections from any available network.
     self.ip = None
     self.requestInfo = False
@@ -22,7 +25,7 @@ class Streamer:
     self.tcp_conn = None
     self.sm = sm if sm \
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
-      'controlsState', 'uploaderState'])
+      'controlsState', 'uploaderState', 'radarState', 'liveCalibration'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
@@ -70,9 +73,15 @@ class Streamer:
     if self.ip:
       self.sm.update(10) # update every 10 ms
       modelV2 = self.sm['modelV2'].to_dict()
+      radarState = self.sm['radarState'].to_dict()
+      liveCalibration = self.sm['liveCalibration'].to_dict()
+
+      data = self.flatten_model_data(modelV2)
+      data.update(radarState)
+      data.update(liveCalibration)
 
       # Pack and send
-      message = msgpack.packb(self.flatten_model_data(modelV2))
+      message = msgpack.packb(data)
       self.udp_sock.sendto(message, (self.ip, UDP_PORT))
 
   def send_tcp_message(self):
