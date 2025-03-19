@@ -25,7 +25,7 @@ class Streamer:
     self.tcp_conn = None
     self.sm = sm if sm \
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
-      'controlsState', 'uploaderState', 'radarState', 'liveCalibration'])
+      'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
@@ -69,16 +69,20 @@ class Streamer:
 
     return model_dict
 
+
   def send_udp_message(self):
     if self.ip:
       self.sm.update(10) # update every 10 ms
       modelV2 = self.sm['modelV2'].to_dict()
       radarState = self.sm['radarState'].to_dict()
       liveCalibration = self.sm['liveCalibration'].to_dict()
+      carParams = self.sm['carParams'].to_dict()
+      carParams.pop('carFw', None)
 
       data = self.flatten_model_data(modelV2)
       data.update(radarState)
       data.update(liveCalibration)
+      data.update(carParams)
 
       # Pack and send
       message = msgpack.packb(data)
