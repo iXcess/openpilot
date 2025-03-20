@@ -117,9 +117,6 @@ class Streamer:
         sett['recordUploadDriverCamera'] = params.get_bool("RecordFront")
         sett['stopDistanceOffset'] = float(params.get("StoppingDistanceOffset") or 0)
         sett['pathSkewOffset'] = float(params.get("DrivePathOffset") or 0)
-        sett['devicePowerOffTime'] = float(params.get("PowerSaverEntryDuration") or 0)
-        # TODO add code for change branch
-        sett['changeBranchStatus'] = params.get("ChangeBranchStatus") or ''
         sett['featurePackage'] = params.get("FeaturesPackage") or ''
         sett['fixFingerprint'] = params.get("FixFingerprint") or ''
 
@@ -178,7 +175,6 @@ class Streamer:
               print(f"RecordUploadDriverCamera: {settings['recordUploadDriverCamera']}")
               print(f"StopDistanceOffset: {settings['stopDistanceOffset']}")
               print(f"PathSkewOffset: {settings['pathSkewOffset']}")
-              print(f"DevicePowerOffTime: {settings['devicePowerOffTime']}")
 
               # Set values
               print("\nPutting parameters")
@@ -194,7 +190,6 @@ class Streamer:
               params.put_bool("RecordFront", settings['recordUploadDriverCamera'])
               params.put("StoppingDistanceOffset", str(settings['stopDistanceOffset']))
               params.put("DrivePathOffset", str(settings['pathSkewOffset']))
-              params.put("PowerSaverEntryDuration", str(settings['devicePowerOffTime']))
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
