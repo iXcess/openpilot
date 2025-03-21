@@ -14,6 +14,74 @@ UDP_PORT = 5006
 TCP_PORT = 5007
 params = Params()
 
+def flatten_model_data(model_dict):
+  # Clean up disengagePredictions inside 'meta'
+  if (meta := model_dict.get("meta")) and isinstance(meta, dict):
+    meta.pop("disengagePredictions", None)
+
+  # Define the special handling keys and their prefixes
+  special_keys = {
+    "laneLines": "laneLine",
+    "leadsV3": "lead",
+    "roadEdges": "roadEdge"
+  }
+
+  # Modify model_dict directly for efficiency
+  for key, prefix in special_keys.items():
+    if (value := model_dict.pop(key, None)) and isinstance(value, list):
+      model_dict.update((f"{prefix}{i}", item) for i, item in enumerate(value, 1))
+
+  return model_dict
+
+def safe_get(key, default_value='', decode_utf8=False, to_float=False, bool_value=False):
+  """
+  Safely retrieves a parameter value while handling exceptions and type conversions.
+  :param params: The params object
+  :param key: The parameter key to retrieve
+  :param default_value: Default value to return in case of an exception
+  :param decode_utf8: Whether to decode the retrieved value as UTF-8
+  :param to_float: Whether to convert the value to float
+  :param bool_value: Whether to retrieve the value as boolean
+  :return: The retrieved value or the default value
+  """
+  try:
+    if bool_value:
+      return params.get_bool(key)  # Get boolean value
+    value = params.get(key) or default_value  # Get the value or default
+    if decode_utf8 and value:
+      return value.decode('utf-8')  # Decode UTF-8 if needed
+    if to_float and value:
+      return float(value)  # Convert to float if needed
+    return value  # Return the retrieved or default value
+  except Exception as e:
+    print(f"Exception occurred while retrieving key '{key}': {e}")
+    return default_value  # Return the default value in case of an exception
+
+def safe_put_all(settings_to_put, mapping, non_bool_values=None):
+  """
+  Safely sets multiple parameter values from the settings dictionary.
+  :param settings: The settings dictionary containing the values.
+  :param mapping: A dictionary mapping param keys to their respective settings keys.
+  :param non_bool_values: A set of param keys to be treated as non-boolean.
+  """
+  if non_bool_values is None:
+    non_bool_values = set()  # Default to an empty set if not provided
+
+  for param_key, settings_key in mapping.items():
+    try:
+      value = settings_to_put[settings_key]  # Retrieve the value from the settings dictionary
+      if param_key in non_bool_values:
+        params.put(param_key, str(value))  # Convert the value to a string and set it
+      else:
+        if not isinstance(value, bool):
+          continue  # Skip if the value is expected to be boolean but isn't
+        params.put_bool(param_key, value)  # Set the value as boolean
+    except KeyError:
+      # Skip if the settings key does not exist
+      pass
+    except Exception as e:
+      print(f"Exception occurred while setting param '{param_key}' with value from '{settings_key}': {e}")
+
 class Streamer:
   def __init__(self, sm=None):
     #self.local_ip = "192.168.100.1"
@@ -50,26 +118,6 @@ class Streamer:
     self.tcp_sock.listen(1)
     self.tcp_sock.setblocking(False)
 
-  def flatten_model_data(self, model_dict):
-    # Clean up disengagePredictions inside 'meta'
-    if (meta := model_dict.get("meta")) and isinstance(meta, dict):
-      meta.pop("disengagePredictions", None)
-
-    # Define the special handling keys and their prefixes
-    special_keys = {
-      "laneLines": "laneLine",
-      "leadsV3": "lead",
-      "roadEdges": "roadEdge"
-    }
-
-    # Modify model_dict directly for efficiency
-    for key, prefix in special_keys.items():
-      if (value := model_dict.pop(key, None)) and isinstance(value, list):
-        model_dict.update((f"{prefix}{i}", item) for i, item in enumerate(value, 1))
-
-    return model_dict
-
-
   def send_udp_message(self):
     if self.ip:
       self.sm.update(10) # update every 10 ms
@@ -79,7 +127,7 @@ class Streamer:
       carParams = self.sm['carParams'].to_dict()
       carParams.pop('carFw', None)
 
-      data = self.flatten_model_data(modelV2)
+      data = flatten_model_data(modelV2)
       data.update(radarState)
       data.update(liveCalibration)
       data.update(carParams)
@@ -100,33 +148,33 @@ class Streamer:
         # TODO send uploadStatus in selfdrive/loggerd/uploader.py
         sett['gitCommit'] = get_commit()[:7]
         # TODO include bukapilot changes in selfdrive/updated.py
-        sett['updateStatus'] = params.get("UpdaterState") or ''
+        sett['updateStatus'] = safe_get("UpdaterState")
 
-        sett['isOffroad'] = params.get_bool("IsOffroad")
-        sett['enableBukapilot'] = params.get_bool("OpenpilotEnabledToggle")
-        sett['quietMode'] = params.get_bool("QuietMode")
-        sett['enableAssistedLaneChange'] = params.get_bool("IsAlcEnabled")
-        sett['enableLaneDepartureWarning'] = params.get_bool("IsLdwEnabled")
-        sett['uploadVideoWiFiOnly'] = params.get_bool("LogVideoWifiOnly")
-        sett['apn'] = params.get("GsmApn") or ''
-        sett['enableRoaming'] = params.get_bool("GsmRoaming")
-        sett['driverPersonality'] = params.get("LongitudinalPersonality").decode('utf-8') or ''
-        sett['useMetricSystem'] = params.get_bool("IsMetric")
-        sett['enableSSH'] = params.get_bool("SshEnabled")
-        sett['experimentalModel'] = params.get_bool("ExperimentalMode")
-        sett['recordUploadDriverCamera'] = params.get_bool("RecordFront")
-        sett['featurePackage'] = params.get("FeaturesPackage") or ''
-        sett['fixFingerprint'] = params.get("FixFingerprint") or ''
+        sett['isOffroad'] = safe_get("IsOffroad", bool_value=True)
+        sett['enableBukapilot'] = safe_get("OpenpilotEnabledToggle", bool_value=True)
+        sett['quietMode'] = safe_get("QuietMode", bool_value=True)
+        sett['enableAssistedLaneChange'] = safe_get("IsAlcEnabled", bool_value=True)
+        sett['enableLaneDepartureWarning'] = safe_get("IsLdwEnabled", bool_value=True)
+        sett['uploadVideoWiFiOnly'] = safe_get("LogVideoWifiOnly", bool_value=True)
+        sett['apn'] = safe_get("GsmApn")
+        sett['enableRoaming'] = safe_get("GsmRoaming", bool_value=True)
+        sett['driverPersonality'] = safe_get("LongitudinalPersonality", decode_utf8=True)
+        sett['useMetricSystem'] = safe_get("IsMetric", bool_value=True)
+        sett['enableSSH'] = safe_get("SshEnabled", bool_value=True)
+        sett['experimentalModel'] = safe_get("ExperimentalMode", bool_value=True)
+        sett['recordUploadDriverCamera'] = safe_get("RecordFront", bool_value=True)
+        sett['featurePackage'] = safe_get("FeaturesPackage")
+        sett['fixFingerprint'] = safe_get("FixFingerprint")
 
         if self.requestInfo:
           sett['requestDeviceInfo'] = True
-          sett['dongleID'] = params.get("DongleId").decode('utf-8') or ''
-          sett['serial'] = params.get("HardwareSerial").decode('utf-8') or ''
+          sett['dongleID'] = safe_get("DongleId", decode_utf8=True)
+          sett['serial'] = safe_get("HardwareSerial", decode_utf8=True)
           sett['hostname'] = socket.gethostname()
           sett['currentVersion'] = get_version()
           sett['osVersion'] = HARDWARE.get_os_version()
           sett['currentBranch'] = get_short_branch()
-          sett['currentChangelog'] = params.get("UpdaterCurrentReleaseNotes") or ''
+          sett['currentChangelog'] = safe_get("UpdaterCurrentReleaseNotes")
           self.requestInfo = False
 
         self.tcp_conn.sendall(msgpack.packb(sett))
@@ -160,30 +208,23 @@ class Streamer:
             self.requestInfo = settings['requestDeviceInfo']
 
             if offroad and not self.requestInfo:
-              print("Received settings:")
-              print(f"EnableBukapilot: {settings['enableBukapilot']}")
-              print(f"QuietMode: {settings['quietMode']}")
-              print(f"EnableAssistedLaneChange: {settings['enableAssistedLaneChange']}")
-              print(f"EnableLaneDepartureWarning: {settings['enableLaneDepartureWarning']}")
-              print(f"UploadVideoWiFiOnly: {settings['uploadVideoWiFiOnly']}")
-              print(f"EnableRoaming: {settings['enableRoaming']}")
-              print(f"UseMetricSystem: {settings['useMetricSystem']}")
-              print(f"EnableSSH: {settings['enableSSH']}")
-              print(f"ExperimentalModel: {settings['experimentalModel']}")
-              print(f"RecordUploadDriverCamera: {settings['recordUploadDriverCamera']}")
-
               # Set values
-              print("\nPutting parameters")
-              params.put_bool("OpenpilotEnabledToggle", settings['enableBukapilot'])
-              params.put_bool("QuietMode", settings['quietMode'])
-              params.put_bool("IsAlcEnabled", settings['enableAssistedLaneChange'])
-              params.put_bool("IsLdwEnabled", settings['enableLaneDepartureWarning'])
-              params.put_bool("LogVideoWifiOnly", settings['uploadVideoWiFiOnly'])
-              params.put_bool("GsmRoaming", settings['enableRoaming'])
-              params.put_bool("IsMetric", settings['useMetricSystem'])
-              params.put_bool("SshEnabled", settings['enableSSH'])
-              params.put_bool("ExperimentalMode", settings['experimentalModel'])
-              params.put_bool("RecordFront", settings['recordUploadDriverCamera'])
+              # print("\nPutting parameters")
+              mapping={
+                "OpenpilotEnabledToggle":"enableBukapilot",
+                "QuietMode":"quietMode",
+                "IsAlcEnabled":"enableAssistedLaneChange",
+                "IsLdwEnabled":"enableLaneDepartureWarning",
+                "LogVideoWifiOnly":"uploadVideoWiFiOnly",
+                "GsmRoaming":"enableRoaming",
+                "IsMetric":"useMetricSystem",
+                "SshEnabled":"enableSSH",
+                "ExperimentalMode":"experimentalModel",
+                "RecordFront":"recordUploadDriverCamera",
+              }
+
+              # non_bool_values = {}
+              safe_put_all(settings, mapping)
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
