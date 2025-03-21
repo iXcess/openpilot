@@ -115,8 +115,6 @@ class Streamer:
         sett['enableSSH'] = params.get_bool("SshEnabled")
         sett['experimentalModel'] = params.get_bool("ExperimentalMode")
         sett['recordUploadDriverCamera'] = params.get_bool("RecordFront")
-        sett['stopDistanceOffset'] = float(params.get("StoppingDistanceOffset") or 0)
-        sett['pathSkewOffset'] = float(params.get("DrivePathOffset") or 0)
         sett['featurePackage'] = params.get("FeaturesPackage") or ''
         sett['fixFingerprint'] = params.get("FixFingerprint") or ''
 
@@ -173,8 +171,6 @@ class Streamer:
               print(f"EnableSSH: {settings['enableSSH']}")
               print(f"ExperimentalModel: {settings['experimentalModel']}")
               print(f"RecordUploadDriverCamera: {settings['recordUploadDriverCamera']}")
-              print(f"StopDistanceOffset: {settings['stopDistanceOffset']}")
-              print(f"PathSkewOffset: {settings['pathSkewOffset']}")
 
               # Set values
               print("\nPutting parameters")
@@ -188,8 +184,6 @@ class Streamer:
               params.put_bool("SshEnabled", settings['enableSSH'])
               params.put_bool("ExperimentalMode", settings['experimentalModel'])
               params.put_bool("RecordFront", settings['recordUploadDriverCamera'])
-              params.put("StoppingDistanceOffset", str(settings['stopDistanceOffset']))
-              params.put("DrivePathOffset", str(settings['pathSkewOffset']))
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
