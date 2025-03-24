@@ -109,7 +109,7 @@ class Streamer:
     self.sm = sm if sm \
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
       'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
-      'carControl', 'driverStateV2', 'driverMonitoringState'])
+      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
@@ -130,6 +130,7 @@ class Streamer:
       data.update(filter_keys(sm['radarState'].to_dict(), ("leadOne", "leadTwo")))
       data.update(filter_keys(sm['liveCalibration'].to_dict(), ["height"]))
       data.update(filter_keys(sm['carParams'].to_dict(), "openpilotLongitudinalControl"))
+      data.update(filter_keys(sm['carState'].to_dict(), ["vEgoCluster"]))
       data.update(sm['carControl'].to_dict())
       data.update(sm['deviceState'].to_dict())
       data.update(sm['driverStateV2'].to_dict())
