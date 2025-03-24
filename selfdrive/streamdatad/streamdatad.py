@@ -4,7 +4,7 @@ import socket
 import msgpack
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
-from cereal import log
+from cereal import log, car
 from openpilot.system.version import get_version, get_commit, get_short_branch
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
@@ -82,6 +82,19 @@ def safe_put_all(settings_to_put, mapping, non_bool_values=None):
     except Exception as e:
       print(f"Exception occurred while setting param '{param_key}' with value from '{settings_key}': {e}")
 
+
+def deviceStatus(sm):
+  if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
+    return "error"
+  else: # TODO: Add initialising if alerts.hasSevere from k_alerts
+    return "ready"
+
+def remainingDataUpload(sm):
+  uploader_state = sm['uploaderState']
+  immediate_queue_size = uploader_state.immediateQueueSize
+  raw_queue_size = uploader_state.rawQueueSize
+  return f"{immediate_queue_size + raw_queue_size} MB"
+
 class Streamer:
   def __init__(self, sm=None):
     #self.local_ip = "192.168.100.1"
@@ -93,22 +106,13 @@ class Streamer:
     self.tcp_conn = None
     self.sm = sm if sm \
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
-      'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams'])
+      'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
+      'carControl', 'driverStateV2'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
 
-  def deviceStatus(self):
-    if self.sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
-      return "error"
-    else: # TODO: Add initialising if alerts.hasSevere from k_alerts
-      return "ready"
 
-  def remainingDataUpload(self):
-    uploader_state = self.sm['uploaderState']
-    immediate_queue_size = uploader_state.immediateQueueSize
-    raw_queue_size = uploader_state.rawQueueSize
-    return f"{immediate_queue_size + raw_queue_size} MB"
 
   def setup_sockets(self):
     self.udp_sock.bind((self.local_ip, UDP_PORT))
@@ -120,17 +124,26 @@ class Streamer:
 
   def send_udp_message(self):
     if self.ip:
-      self.sm.update(10) # update every 10 ms
-      modelV2 = self.sm['modelV2'].to_dict()
-      radarState = self.sm['radarState'].to_dict()
-      liveCalibration = self.sm['liveCalibration'].to_dict()
-      carParams = self.sm['carParams'].to_dict()
+      (sm := self.sm).update(10) # update every 10 ms
+      modelV2 = sm['modelV2'].to_dict()
+      radarState = sm['radarState'].to_dict()
+      liveCalibration = sm['liveCalibration'].to_dict()
+      carParams = sm['carParams'].to_dict()
       carParams.pop('carFw', None)
+      carControl = sm['carControl'].to_dict()
+      deviceState = sm['deviceState'].to_dict()
+      driverStateV2 = sm['driverStateV2'].to_dict()
+      controlsState = sm['controlsState'].to_dict()
 
       data = flatten_model_data(modelV2)
       data.update(radarState)
       data.update(liveCalibration)
       data.update(carParams)
+      data.update(carControl)
+      data.update(deviceState)
+      data.update(driverStateV2)
+      data.update(controlsState)
+      data.update(dict(car.CarEvent.EventName.schema.enumerants.items()))
 
       # Pack and send
       message = msgpack.packb(data)
@@ -139,12 +152,13 @@ class Streamer:
   def send_tcp_message(self):
     if self.tcp_conn:
       try:
-        self.sm.update(10)
+        (sm := self.sm).update(10)
         sett = {}
-        sett['connectivityStatus'] = str(self.sm['deviceState'].networkType)
-        sett['deviceStatus'] = self.deviceStatus()
-        sett['alerts'] = (str(self.sm['controlsState'].alertText1) + "\n" + str(self.sm['controlsState'].alertText2))
-        sett['remainingDataUpload'] = self.remainingDataUpload()
+        sett['connectivityStatus'] = str(sm['deviceState'].networkType)
+        sett['deviceStatus'] = deviceStatus(sm)
+        controlsState = sm['controlsState']
+        sett['alerts'] = f"{controlsState.alertText1}\n{controlsState.alertText2}"
+        sett['remainingDataUpload'] = remainingDataUpload(sm)
         # TODO send uploadStatus in selfdrive/loggerd/uploader.py
         sett['gitCommit'] = get_commit()[:7]
         # TODO include bukapilot changes in selfdrive/updated.py
