@@ -14,24 +14,27 @@ UDP_PORT = 5006
 TCP_PORT = 5007
 params = Params()
 
-def flatten_model_data(model_dict):
-  # Clean up disengagePredictions inside 'meta'
-  if (meta := model_dict.get("meta")) and isinstance(meta, dict):
-    meta.pop("disengagePredictions", None)
+def extract_model_data(model_dict):
+  # Extract 'position' directly
+  extracted_data = {"position": model_dict.get("position")}
 
-  # Define the special handling keys and their prefixes
-  special_keys = {
-    "laneLines": "laneLine",
-    "leadsV3": "lead",
-    "roadEdges": "roadEdge"
-  }
+  # Flatten laneLines and roadEdges efficiently with single lookup
+  for key in ("laneLines", "roadEdges"):
+    value = model_dict.get(key)
+    if isinstance(value, list):
+      prefix = key[:-1]
+      extracted_data.update((f"{prefix}{i}", item) for i, item in enumerate(value, 1))
 
-  # Modify model_dict directly for efficiency
-  for key, prefix in special_keys.items():
-    if (value := model_dict.pop(key, None)) and isinstance(value, list):
-      model_dict.update((f"{prefix}{i}", item) for i, item in enumerate(value, 1))
+  return extracted_data
 
-  return model_dict
+def filter_keys(model_dict, keys_to_keep):
+  result = {}
+  for key in keys_to_keep:
+    if key in model_dict:
+      result[key] = model_dict[key]
+      if len(result) == len(keys_to_keep):
+        break
+  return result
 
 def safe_get(key, default_value='', decode_utf8=False, to_float=False, bool_value=False):
   """
@@ -82,7 +85,6 @@ def safe_put_all(settings_to_put, mapping, non_bool_values=None):
     except Exception as e:
       print(f"Exception occurred while setting param '{param_key}' with value from '{settings_key}': {e}")
 
-
 def deviceStatus(sm):
   if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
     return "error"
@@ -112,8 +114,6 @@ class Streamer:
 
     self.setup_sockets()
 
-
-
   def setup_sockets(self):
     self.udp_sock.bind((self.local_ip, UDP_PORT))
     self.udp_sock.setblocking(False)
@@ -125,24 +125,15 @@ class Streamer:
   def send_udp_message(self):
     if self.ip:
       (sm := self.sm).update(10) # update every 10 ms
-      modelV2 = sm['modelV2'].to_dict()
-      radarState = sm['radarState'].to_dict()
-      liveCalibration = sm['liveCalibration'].to_dict()
-      carParams = sm['carParams'].to_dict()
-      carParams.pop('carFw', None)
-      carControl = sm['carControl'].to_dict()
-      deviceState = sm['deviceState'].to_dict()
-      driverStateV2 = sm['driverStateV2'].to_dict()
-      controlsState = sm['controlsState'].to_dict()
 
-      data = flatten_model_data(modelV2)
-      data.update(radarState)
-      data.update(liveCalibration)
-      data.update(carParams)
-      data.update(carControl)
-      data.update(deviceState)
-      data.update(driverStateV2)
-      data.update(controlsState)
+      data = extract_model_data(sm['modelV2'].to_dict())
+      data.update(filter_keys(sm['radarState'].to_dict(), ("leadOne", "leadTwo")))
+      data.update(filter_keys(sm['liveCalibration'].to_dict(), ["height"]))
+      data.update(filter_keys(sm['carParams'].to_dict(), "openpilotLongitudinalControl"))
+      data.update(sm['carControl'].to_dict())
+      data.update(sm['deviceState'].to_dict())
+      data.update(sm['driverStateV2'].to_dict())
+      data.update(sm['controlsState'].to_dict())
       data.update(dict(car.CarEvent.EventName.schema.enumerants.items()))
 
       # Pack and send
