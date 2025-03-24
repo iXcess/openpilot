@@ -498,8 +498,6 @@ class Ka2(HardwareBase):
     pass
 
   def booted(self):
-    if (time.monotonic() < 60*2):
-      return False
     return True
 
 if __name__ == "__main__":
