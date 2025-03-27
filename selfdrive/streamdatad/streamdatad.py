@@ -140,7 +140,10 @@ class Streamer:
 
       # Pack and send
       message = msgpack.packb(data)
-      self.udp_sock.sendto(message, (self.ip, UDP_PORT))
+      try:
+        self.udp_sock.sendto(message, (self.ip, UDP_PORT))
+      except BlockingIOError:
+        pass
 
   def send_tcp_message(self):
     if self.tcp_conn:
