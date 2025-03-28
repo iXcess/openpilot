@@ -109,7 +109,7 @@ class Streamer:
     self.sm = sm if sm \
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
       'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
-      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState'])
+      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
@@ -136,6 +136,7 @@ class Streamer:
       data.update(sm['driverStateV2'].to_dict())
       data.update(sm['controlsState'].to_dict())
       data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode"]))
+      data.update(filter_keys(sm['longitudinalPlan'].to_dict(), ["personality"]))
       data.update(dict(car.CarEvent.EventName.schema.enumerants.items()))
 
       # Pack and send
