@@ -15,8 +15,8 @@ TCP_PORT = 5007
 params = Params()
 
 def extract_model_data(model_dict):
-  # Extract 'position' directly
-  extracted_data = {"position": model_dict.get("position")}
+  # Extract 'position' and 'acceleration' directly
+  extracted_data = {"position": model_dict.get("position"),"acceleration": model_dict.get("acceleration") }
 
   # Flatten laneLines and roadEdges efficiently with single lookup
   for key in ("laneLines", "roadEdges"):
