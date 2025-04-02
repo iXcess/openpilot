@@ -1,4 +1,4 @@
-const CanMsg DNGA_TX_MSGS[] = {{0x250, 0, 8}};
+const CanMsg DNGA_TX_MSGS[] = {{464, 0, 8}, {628, 0, 8}, {625, 0, 8}, {627, 0, 8}};
 
 RxCheck dnga_rx_checks[] = {
   //{.msg = {{0x35F, 0, 8, .frequency = 20U}, { 0 }, { 0 }}},

@@ -12,6 +12,7 @@ class CarState(CarStateBase):
     can_define = CANDefine(DBC[CP.carFingerprint]['pt'])
     self.shifter_values = can_define.dv["DRIVE_STATE"]['GEAR']
     self.set_distance_values = can_define.dv['ACC_HUD_ADAS']['SET_DISTANCE']
+
     self.is_cruise_latch = False
     self.prev_angle = 0
     self.lss_state = 0
@@ -27,20 +28,19 @@ class CarState(CarStateBase):
     self.pt5 = 0
     self.lkas_rdy_btn = False
 
-  def update(self, cp):
+  def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
 
-    self.tsr = cp.vl["LKAS_HUD_ADAS"]['TSR']
-    self.lka_on = cp.vl["LKAS_HUD_ADAS"]['STEER_ACTIVE_ACTIVE_LOW']
+    self.tsr = cp_cam.vl["LKAS_HUD_ADAS"]['TSR']
+    self.lka_on = cp_cam.vl["LKAS_HUD_ADAS"]['STEER_ACTIVE_ACTIVE_LOW']
     self.lkas_rdy_btn = cp.vl["PCM_BUTTONS"]['LKAS_ON_BTN']
-    self.abh = cp.vl["LKAS_HUD_ADAS"]['SET_ME_XFF']
-    self.passthrough = cp.vl["LKAS_HUD_ADAS"]['SET_ME_X5F']
-    self.HMA = cp.vl["LKAS_HUD_ADAS"]['HMA']
-    self.pt2 = cp.vl["LKAS_HUD_ADAS"]['PT2']
-    self.pt3 = cp.vl["LKAS_HUD_ADAS"]['PT3']
-    self.pt4 = cp.vl["LKAS_HUD_ADAS"]['PT4']
-    self.pt5 = cp.vl["LKAS_HUD_ADAS"]['PT5']
-    self.counter_pcm_buttons = cp.vl["PCM_BUTTONS"]['COUNTER']
+    self.abh = cp_cam.vl["LKAS_HUD_ADAS"]['SET_ME_XFF']
+    self.passthrough = cp_cam.vl["LKAS_HUD_ADAS"]['SET_ME_X5F']
+    self.HMA = cp_cam.vl["LKAS_HUD_ADAS"]['HMA']
+    self.pt2 = cp_cam.vl["LKAS_HUD_ADAS"]['PT2']
+    self.pt3 = cp_cam.vl["LKAS_HUD_ADAS"]['PT3']
+    self.pt4 = cp_cam.vl["LKAS_HUD_ADAS"]['PT4']
+    self.pt5 = cp_cam.vl["LKAS_HUD_ADAS"]['PT5']
 
     # EV irrelevant messages
     ret.brakeHoldActive = False
@@ -92,7 +92,7 @@ class CarState(CarStateBase):
     # TODO: get the real value
     ret.stockAeb = False
     ret.stockFcw = False
-    ret.cruiseState.available = any([cp.vl["ACC_HUD_ADAS"]["ACC_ON1"], cp.vl["ACC_HUD_ADAS"]["ACC_ON2"]])
+    ret.cruiseState.available = any([cp_cam.vl["ACC_HUD_ADAS"]["ACC_ON1"], cp_cam.vl["ACC_HUD_ADAS"]["ACC_ON2"]])
 
     # distance_val = int(cp.vl["ACC_HUD_ADAS"]['SET_DISTANCE'])
     # TODO: ret.cruiseState.setDistance = self.parse_set_distance(self.set_distance_values.get(distance_val, None))
@@ -102,20 +102,20 @@ class CarState(CarStateBase):
       self.is_cruise_latch = True
 
     # this can override the above engage disengage logic
-    if bool(cp.vl["ACC_CMD"]["ACC_REQ_NOT_STANDSTILL"]):
+    if bool(cp_cam.vl["ACC_CMD"]["ACC_REQ_NOT_STANDSTILL"]):
       self.is_cruise_latch = True
 
     # byd speedCluster will follow wheelspeed if cruiseState is not available
     if ret.cruiseState.available:
-      ret.cruiseState.speedCluster = max(int(cp.vl["ACC_HUD_ADAS"]['SET_SPEED']), 30) * CV.KPH_TO_MS
+      ret.cruiseState.speedCluster = max(int(cp_cam.vl["ACC_HUD_ADAS"]['SET_SPEED']), 30) * CV.KPH_TO_MS
     else:
       ret.cruiseState.speedCluster = 0
 
     ret.cruiseState.speed = ret.cruiseState.speedCluster
-    ret.cruiseState.standstill = bool(cp.vl["ACC_CMD"]["STANDSTILL_STATE"])
+    ret.cruiseState.standstill = bool(cp_cam.vl["ACC_CMD"]["STANDSTILL_STATE"])
     ret.cruiseState.nonAdaptive = False
 
-    stock_acc_on =  bool(cp.vl["ACC_CMD"]["ACC_CONTROLLABLE_AND_ON"])
+    stock_acc_on =  bool(cp_cam.vl["ACC_CMD"]["ACC_CONTROLLABLE_AND_ON"])
     if not ret.cruiseState.available or ret.brakePressed or not stock_acc_on:
       self.is_cruise_latch = False
 
@@ -133,8 +133,8 @@ class CarState(CarStateBase):
       ret.leftBlindspot = bool(cp.vl["BSM"]["LEFT_APPROACH"])
       ret.rightBlindspot = bool(cp.vl["BSM"]["RIGHT_APPROACH"])
 
-    self.lss_state = cp.vl["LKAS_HUD_ADAS"]["LSS_STATE"]
-    self.lss_alert = cp.vl["LKAS_HUD_ADAS"]["SETTINGS"]
+    self.lss_state = cp_cam.vl["LKAS_HUD_ADAS"]["LSS_STATE"]
+    self.lss_alert = cp_cam.vl["LKAS_HUD_ADAS"]["SETTINGS"]
     return ret
 
 
@@ -143,18 +143,27 @@ class CarState(CarStateBase):
     signals = [
       # TODO get the frequency
       # sig_address, frequency
-      ("DRIVE_STATE", 0),
-      ("ACC_HUD_ADAS", 0),
-      ("WHEEL_SPEED", 0),
+      ("DRIVE_STATE", 50),
+      ("WHEEL_SPEED", 50),
       ("PEDAL", 0),
-      ("METER_CLUSTER", 0),
-      ("STEER_MODULE_2", 0),
+      ("METER_CLUSTER", 20),
+      ("STEER_MODULE_2", 100),
       ("STEERING_TORQUE", 0),
       ("STALKS", 0),
-      ("BSM", 0),
-      ("ACC_CMD", 0),
+      ("BSM", 20),
       ("PCM_BUTTONS", 0),
-      ("LKAS_HUD_ADAS", 0),
     ]
 
     return CANParser(DBC[CP.carFingerprint]['pt'], signals, CANBUS.main_bus)
+
+  @staticmethod
+  def get_cam_can_parser(CP):
+    signals = [
+      # TODO get the frequency
+      # sig_address, frequency
+      ("ACC_HUD_ADAS", 0),
+      ("ACC_CMD", 0),
+      ("LKAS_HUD_ADAS", 0),
+    ]
+
+    return CANParser(DBC[CP.carFingerprint]['pt'], signals, 1)

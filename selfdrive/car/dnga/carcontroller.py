@@ -2,8 +2,8 @@ from opendbc.can.packer import CANPacker
 
 from openpilot.selfdrive.car import make_can_msg
 from openpilot.selfdrive.car.interfaces import CarControllerBase
-from openpilot.selfdrive.car.dnga.dngacan import create_can_steer_command, dnga_create_accel_command, \
-                                       dnga_create_brake_command, dnga_create_hud, dnga_buttons
+from openpilot.selfdrive.car.dnga.dngacan import create_can_steer_command, create_accel_command, \
+                                       create_brake_command, create_hud, buttons
 from openpilot.selfdrive.car.dnga.values import CAR, DBC, BRAKE_SCALE, SNG_CAR
 from openpilot.common.numpy_fast import clip, interp
 from openpilot.common.realtime import DT_CTRL
@@ -21,7 +21,7 @@ class BrakingStatus():
   BRAKE_HOLD = 1
   PUMP_RESET = 2
 
-def apply_dnga_steer_torque_limits(apply_torque, apply_torque_last, driver_torque, blinkerOn, LIMITS):
+def apply_steer_torque_limits(apply_torque, apply_torque_last, driver_torque, blinkerOn, LIMITS):
 
   # limits due to driver torque and lane change
   reduced_torque_mult = 10 if blinkerOn else 1.5
@@ -135,7 +135,7 @@ class CarController(CarControllerBase):
     new_steer = int(round(actuators.steer * steer_max_interp))
 
     isBlinkerOn = CS.out.leftBlinker != CS.out.rightBlinker
-    apply_steer = apply_dnga_steer_torque_limits(new_steer, self.last_steer, CS.out.steeringTorqueEps, isBlinkerOn, self.params)
+    apply_steer = apply_steer_torque_limits(new_steer, self.last_steer, CS.out.steeringTorqueEps, isBlinkerOn, self.params)
 
     ts = self.frame * DT_CTRL
 
@@ -153,7 +153,7 @@ class CarController(CarControllerBase):
         apply_steer = -CS.ldpSteerV
 
       steer_req = (enabled or self.stockLdw) and CS.lkas_latch and not CS.lkaDisabled
-      can_sends.append(create_can_steer_command(self.packer, apply_steer, steer_req, (self.frame/2) % 16))
+      can_sends.append(create_can_steer_command(self.packer, apply_steer, steer_req))
 
     # CAN controlled longitudinal
     if (self.frame % 5) == 0 and CS.CP.openpilotLongitudinalControl:
@@ -165,7 +165,7 @@ class CarController(CarControllerBase):
       else:
         if enabled:
           # spam engage until stock ACC engages
-          can_sends.append(dnga_buttons(self.packer, 0, 1, (self.frame/5) % 16))
+          can_sends.append(buttons(self.packer, 0, 1))
 
       # check if need to revert to bukapilot acc
       if CS.out.vEgo < 8.3: # 30kmh
@@ -174,9 +174,9 @@ class CarController(CarControllerBase):
       # set stock acc follow speed
       if enabled and self.using_stock_acc:
         if CS.out.cruiseState.speedCluster - (CS.stock_acc_set_speed // 3.6) > 0.3:
-          can_sends.append(dnga_buttons(self.packer, 0, 1, (self.frame/5) % 16))
+          can_sends.append(buttons(self.packer, 0, 1))
         if (CS.stock_acc_set_speed // 3.6) - CS.out.cruiseState.speedCluster > 0.3:
-          can_sends.append(dnga_buttons(self.packer, 1, 0, (self.frame/5) % 16))
+          can_sends.append(buttons(self.packer, 1, 0))
 
       # standstill logic
       if enabled and apply_brake > 0 and CS.out.standstill and CS.CP.carFingerprint not in SNG_CAR:
@@ -198,18 +198,18 @@ class CarController(CarControllerBase):
 
       if self.using_stock_acc:
         des_speed = max(CS.stock_acc_cmd // 3.6, des_speed)
-        can_sends.append(dnga_create_accel_command(self.packer, CS.out.cruiseState.speedCluster,
+        can_sends.append(create_accel_command(self.packer, CS.out.cruiseState.speedCluster,
                                                       CS.out.cruiseState.available, enabled, lead_visible,
                                                       des_speed, apply_brake, pump, CS.distance_val))
       else:
-        can_sends.append(dnga_create_accel_command(self.packer, CS.out.cruiseState.speedCluster,
+        can_sends.append(create_accel_command(self.packer, CS.out.cruiseState.speedCluster,
                                                       CS.out.cruiseState.available, enabled, lead_visible,
                                                       des_speed, apply_brake, pump, CS.distance_val))
 
       # Let stock AEB kick in only when system not engaged
       aeb = not enabled and CS.aebV
-      can_sends.append(dnga_create_brake_command(self.packer, enabled, brake_req, pump, apply_brake, aeb, (self.frame/5) % 8))
-      can_sends.append(dnga_create_hud(self.packer, CS.out.cruiseState.available and CS.lkas_latch, enabled, llane_visible, rlane_visible, self.stockLdw, CS.out.stockFcw, CS.out.stockAeb, CS.frontDepartWarning, CS.stock_lkc_off, CS.stock_fcw_off))
+      can_sends.append(create_brake_command(self.packer, enabled, brake_req, pump, apply_brake, aeb))
+      can_sends.append(create_hud(self.packer, CS.out.cruiseState.available and CS.lkas_latch, enabled, llane_visible, rlane_visible, self.stockLdw, CS.out.stockFcw, CS.out.stockAeb, CS.frontDepartWarning, CS.stock_lkc_off, CS.stock_fcw_off))
 
 
     self.last_steer = apply_steer

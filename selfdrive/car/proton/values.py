@@ -16,7 +16,8 @@ class ProtonPlatformConfig(PlatformConfig):
 
 class CANBUS:
   main_bus = 0
-  cam_bus = 1
+  radar_bus = 1
+  cam_bus = 2
 
 class CAR(Platforms):
   S70 = ProtonPlatformConfig(

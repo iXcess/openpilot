@@ -1,4 +1,4 @@
-const CanMsg PROTON_TX_MSGS[] = {{0x250, 0, 8}};
+const CanMsg PROTON_TX_MSGS[] = {{432, 0, 8}};
 
 RxCheck proton_rx_checks[] = {
   //{.msg = {{0x35F, 0, 8, .frequency = 20U}, { 0 }, { 0 }}},
@@ -23,15 +23,14 @@ static bool proton_tx_hook(const CANPacket_t *to_send) {
 
 static int proton_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
-
   if (bus_num == 0) {
-    bus_fwd = 2;
+    bus_fwd = 1;
   }
 
-  if (bus_num == 2) {
+  if (bus_num == 1) {
     bool is_lkas_msg = ((addr == 432));// || (addr == 790));
-    bool is_acc_msg = (addr == 417);
-    bool block_msg = is_lkas_msg || is_acc_msg;
+    //bool is_acc_msg = (addr == 417);
+    bool block_msg = is_lkas_msg;// || is_acc_msg;
     if (!block_msg) {
       bus_fwd = 0;
     }

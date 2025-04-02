@@ -13,29 +13,32 @@ class CarState(CarStateBase):
     can_define = CANDefine(DBC[CP.carFingerprint]['pt'])
     self.shifter_values = can_define.dv["TRANSMISSION"]['GEAR']
     self.set_distance_values = can_define.dv['PCM_BUTTONS']['SET_DISTANCE']
+
     self.is_cruise_latch = False
     self.acc_req = False
     self.hand_on_wheel_warning = False
     self.is_icc_on = False
     self.prev_angle = 0
 
-    self.stock_lks_settings = 0
-    self.stock_lks_settings2 = 0
-    self.stock_ldp = 0
+    self.lks_audio = 0
+    self.lks_tactile = 0
+    self.lks_assist_mode = 0
+    self.lks_aux = 0
+    self.lka_enable = 0
+    self.stock_ldw = 0
+    self.stock_ldp_left = 0
+    self.stock_ldp_right = 0
     self.stock_ldp_cmd = 0
     self.steer_dir = 0
-    self.lkaDisabled = 0
 
-  def update(self, cp):
+  def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
 
-    self.stock_lks_settings = cp.vl["ADAS_LKAS"]["STOCK_LKS_SETTINGS"]
-    self.stock_ldp_cmd = cp.vl["ADAS_LKAS"]["STEER_CMD"]
-    self.stock_lks_settings2 = cp.vl["ADAS_LKAS"]["SET_ME_1_1"]
-    self.steer_dir = cp.vl["ADAS_LKAS"]["STEER_DIR"]
-    self.stock_ldp = bool(cp.vl["LKAS"]["LANE_DEPARTURE_WARNING_RIGHT"]) or bool(cp.vl["LKAS"]["LANE_DEPARTURE_WARNING_LEFT"])
-    # If cruise mode is ICC, make bukapilot control steering so it won't disengage.
-    ret.lkaDisabled = not (bool(cp.vl["ADAS_LKAS"]["LKS_ENABLE"]) or self.is_icc_on)
+    self.stock_ldp_cmd = cp_cam.vl["ADAS_LKAS"]["STEER_CMD"]
+    self.stock_ldw = cp_cam.vl["ADAS_LKAS"]["LKS_LDW"]
+    self.steer_dir = cp_cam.vl["ADAS_LKAS"]["STEER_DIR"]
+    self.stock_ldp_left = bool(cp_cam.vl["LKAS"]["STEER_REQ_LEFT"])
+    self.stock_ldp_right = bool(cp_cam.vl["LKAS"]["STEER_REQ_RIGHT"])
 
     ret.wheelSpeeds = self.get_wheel_speeds(
       cp.vl["WHEEL_SPEED"]['WHEELSPEED_F'],
@@ -79,17 +82,23 @@ class CarState(CarStateBase):
     self.prev_angle = ret.steeringAngleDeg
     ret.steeringTorque = cp.vl["STEERING_TORQUE"]['MAIN_TORQUE'] * steer_dir
     ret.steeringTorqueEps = cp.vl["STEERING_MODULE"]['STEER_RATE'] * steer_dir
-    ret.steeringPressed = bool(abs(ret.steeringTorqueEps) > 5)
-    self.hand_on_wheel_warning = bool(cp.vl["ADAS_LKAS"]["HAND_ON_WHEEL_WARNING"])
+    ret.steeringPressed = bool(abs(ret.steeringTorque) > 31)
+
+    # miscs
+    self.hand_on_wheel_warning = any([cp_cam.vl["ADAS_LKAS"]["HAND_ON_WHEEL_WARNING"], \
+                                 cp_cam.vl["ADAS_LKAS"]["WHEEL_WARNING_CHIME"]])
+    self.leadDistance = cp_cam.vl["ADAS_LEAD_DETECT"]["LEAD_DISTANCE"]
+    self.hasAnyLead = bool(cp_cam.vl["ADAS_LEAD_DETECT"]["IS_LEAD2"])
     self.is_icc_on = bool(cp.vl["PCM_BUTTONS"]["ICC_ON"])
+    self.lka_enable = bool(cp_cam.vl["ADAS_LKAS"]["LKA_ENABLE"])
 
     ret.vEgoCluster = ret.vEgo * HUD_MULTIPLIER
 
     # Todo: get the real value
     ret.stockAeb = False
-    ret.stockFcw = bool(cp.vl["FCW"]["STOCK_FCW_TRIGGERED"])
+    ret.stockFcw = bool(cp_cam.vl["FCW"]["STOCK_FCW_TRIGGERED"])
 
-    self.acc_req = bool(cp.vl["ACC_CMD"]["ACC_REQ"])
+    self.acc_req = bool(cp_cam.vl["ACC_CMD"]["ACC_REQ"])
     ret.cruiseState.available = any([cp.vl["PCM_BUTTONS"]["ACC_ON_OFF_BUTTON"], cp.vl["PCM_BUTTONS"]["GAS_OVERRIDE"]])
 
     #distance_val = int(cp.vl["PCM_BUTTONS"]['SET_DISTANCE'])
@@ -102,11 +111,10 @@ class CarState(CarStateBase):
     if cp.vl["PCM_BUTTONS"]["ACC_SET"] != 0 and not ret.brakePressed:
       self.is_cruise_latch = True
 
-    # set speed in range of 30 - 130kmh only
     self.cruise_speed = int(cp.vl["PCM_BUTTONS"]['ACC_SET_SPEED']) * CV.KPH_TO_MS
     ret.cruiseState.speedCluster = self.cruise_speed
     ret.cruiseState.speed = ret.cruiseState.speedCluster / HUD_MULTIPLIER
-    ret.cruiseState.standstill = bool(cp.vl["ACC_CMD"]["STANDSTILL2"])
+    ret.cruiseState.standstill = bool(cp_cam.vl["ACC_CMD"]["STANDSTILL2"])
     ret.cruiseState.nonAdaptive = False
 
     if not ret.cruiseState.available:
@@ -130,6 +138,12 @@ class CarState(CarStateBase):
       ret.leftBlindspot = bool(cp.vl["BSM_ADAS"]["LEFT_APPROACH"]) or bool(cp.vl["BSM_ADAS"]["LEFT_APPROACH_WARNING"])
       ret.rightBlindspot = bool(cp.vl["BSM_ADAS"]["RIGHT_APPROACH"]) or bool(cp.vl["BSM_ADAS"]["RIGHT_APPROACH_WARNING"])
 
+    # LKS audio and tactile initialised to None, ensure they are read last
+    self.lks_assist_mode = cp_cam.vl["ADAS_LKAS"]["LKS_ASSIST_MODE"]
+    self.lks_aux = cp_cam.vl["ADAS_LKAS"]["STOCK_LKS_AUX"]
+    self.lks_audio = cp_cam.vl["ADAS_LKAS"]["LKS_WARNING_AUDIO"]
+    self.lks_tactile = cp_cam.vl["ADAS_LKAS"]["LKS_WARNING_TACTILE"]
+
     return ret
 
 
@@ -138,7 +152,6 @@ class CarState(CarStateBase):
     signals = [
       # TODO get the frequency
       # sig_address, frequency
-      ("ADAS_LEAD_DETECT", 0),
       ("WHEEL_SPEED", 0),
       ("PCM_BUTTONS", 0),
       ("PARKING_BRAKE", 0),
@@ -152,10 +165,20 @@ class CarState(CarStateBase):
       ("SEATBELTS", 0),
       ("DOOR_LEFT_SIDE", 0),
       ("DOOR_RIGHT_SIDE", 0),
+    ]
+
+    return CANParser(DBC[CP.carFingerprint]['pt'], signals, CANBUS.main_bus)
+
+  @staticmethod
+  def get_cam_can_parser(CP):
+    signals = [
+      # TODO get the frequency
+      # sig_address, frequency
+      ("ADAS_LEAD_DETECT", 0),
       ("ACC_CMD", 0),
       ("ADAS_LKAS", 0),
       ("LKAS", 0),
       ("FCW", 0),
     ]
 
-    return CANParser(DBC[CP.carFingerprint]['pt'], signals, CANBUS.main_bus)
+    return CANParser(DBC[CP.carFingerprint]['pt'], signals, CANBUS.cam_bus)

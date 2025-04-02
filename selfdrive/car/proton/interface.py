@@ -62,13 +62,10 @@ class CarInterface(CarInterfaceBase):
 
   # returns a car.CarState
   def _update(self, c):
-    ret = self.CS.update(self.cp)
+    ret = self.CS.update(self.cp, self.cp_cam)
 
     # events
     events = self.create_common_events(ret)
-
-    # TODO: if self.CS.hand_on_wheel_warning and self.CS.is_icc_on:
-    #  events.add(EventName.protonHandOnWheelWarning)
 
     ret.events = events.to_msg()
     return ret

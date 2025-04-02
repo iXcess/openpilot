@@ -10,7 +10,8 @@ class BYDPlatformConfig(PlatformConfig):
 
 class CANBUS:
   main_bus = 0
-  cam_bus = 1
+  radar_bus = 1
+  cam_bus = 2
 
 class CAR(Platforms):
   ATTO3 = BYDPlatformConfig(
