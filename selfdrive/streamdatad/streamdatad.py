@@ -138,7 +138,7 @@ class Streamer:
       data.update(sm['deviceState'].to_dict())
       data.update(sm['driverStateV2'].to_dict())
       data.update(sm['controlsState'].to_dict())
-      data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode"]))
+      data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode", "events"]))
       data.update(filter_keys(sm['longitudinalPlan'].to_dict(), ["personality"]))
       data.update(dict(car.CarEvent.EventName.schema.enumerants.items()))
 
