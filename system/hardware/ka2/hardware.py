@@ -403,8 +403,8 @@ class Ka2(HardwareBase):
     sudo_write("userspace", "/sys/class/devfreq/fdab0000.npu/governor")
     sudo_write("1000000000", "/sys/class/devfreq/fdab0000.npu/userspace/set_freq")
 
-    sudo_write("userspace", "/sys/class/devfreq/dmc/governor")
-    sudo_write("2112000000", "/sys/class/devfreq/dmc/userspace/set_freq")
+    #sudo_write("userspace", "/sys/class/devfreq/dmc/governor")
+    #sudo_write("2112000000", "/sys/class/devfreq/dmc/userspace/set_freq")
 
   def configure_modem(self):
     sim_id = self.get_sim_info().get('sim_id', '')
