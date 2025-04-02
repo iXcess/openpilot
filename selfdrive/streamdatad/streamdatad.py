@@ -4,7 +4,7 @@ import socket
 import msgpack
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
-from cereal import log, car
+from cereal import log
 from openpilot.system.version import get_version, get_commit, get_short_branch
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
@@ -112,7 +112,7 @@ class Streamer:
     self.sm = sm if sm \
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
       'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
-      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan'])
+      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan', 'onroadEvents'])
     self.rk = Ratekeeper(10)  # Ratekeeper for 10 Hz loop
 
     self.setup_sockets()
@@ -140,7 +140,7 @@ class Streamer:
       data.update(sm['controlsState'].to_dict())
       data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode", "events"]))
       data.update(filter_keys(sm['longitudinalPlan'].to_dict(), ["personality"]))
-      data.update(dict(car.CarEvent.EventName.schema.enumerants.items()))
+      data.update({"onroadEvents": [e.to_dict() for e in sm['onroadEvents']]})
 
       # Pack and send
       message = msgpack.packb(data)
