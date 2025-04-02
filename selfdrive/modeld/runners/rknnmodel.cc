@@ -105,7 +105,7 @@ void RKNNModel::execute() {
 
   // print out total model execution time (including rknn api's pre and post processing time)
   RKNN_CHECK(rknn_query(ctx, RKNN_QUERY_PERF_RUN, &(perf_run), sizeof(rknn_perf_run)));
-  print_execution_time(&perf_run);
+  //print_execution_time(&perf_run);
 
   // Model only has one output
   assert(io_num.n_output == 1);

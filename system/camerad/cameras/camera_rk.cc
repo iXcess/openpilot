@@ -219,15 +219,12 @@ void cameras_run(MultiCameraState *s) {
         switch (i) {
           case 0:
             s->driver_cam.dequeue_buf();
-            LOGD("dcam dequeue");
             break;
           case 1:
             s->road_cam.dequeue_buf();
-            LOGD("lcam dequeue");
             break;
           case 2:
             s->wide_road_cam.dequeue_buf();
-            LOGD("ecam dequeue");
             break;
         }
       }
