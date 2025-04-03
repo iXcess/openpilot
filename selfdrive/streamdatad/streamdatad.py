@@ -121,7 +121,8 @@ class Streamer:
 
   def check_calibration(self, is_offroad):
     # Check calibration status and reset if engine on and calibration invalid
-    if not is_offroad and self.sm['liveCalibration'].calStatus == log.LiveCalibrationData.Status.invalid \
+    if not is_offroad and self.sm['liveCalibration'].calStatus in \
+      (log.LiveCalibrationData.Status.invalid, log.LiveCalibrationData.Status.uncalibrated) \
       and (cur_time := monotonic()) - self.last_calibration_sent > 0.1:
         # Reset calibration, retry every 0.1 seconds
         self.last_calibration_sent = cur_time
