@@ -2,6 +2,7 @@
 
 import socket
 import msgpack
+from time import monotonic
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 from cereal import log
@@ -114,16 +115,27 @@ class Streamer:
       'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
       'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan', 'onroadEvents'])
     self.rk = Ratekeeper(30)  # Ratekeeper for 30 Hz loop
+    self.last_calibration_sent = 0
 
     self.setup_sockets()
 
+  def check_calibration(self, is_offroad):
+    # Check calibration status and reset if engine on and calibration invalid
+    if not is_offroad and self.sm['liveCalibration'].calStatus == log.LiveCalibrationData.Status.invalid \
+      and (cur_time := monotonic()) - self.last_calibration_sent > 0.1:
+        # Reset calibration, retry every 0.1 seconds
+        self.last_calibration_sent = cur_time
+        params.remove("CalibrationParams")
+        params.remove("LiveTorqueParameters")
+
   def setup_sockets(self):
-    self.udp_sock.bind((self.local_ip, UDP_PORT))
-    self.udp_sock.setblocking(False)
-    self.tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable reuse for TCP socket
-    self.tcp_sock.bind((self.local_ip, TCP_PORT))
-    self.tcp_sock.listen(1)
-    self.tcp_sock.setblocking(False)
+    local_ip = self.local_ip
+    (udp_sock := self.udp_sock).bind((local_ip, UDP_PORT))
+    udp_sock.setblocking(False)
+    (tcp_sock := self.tcp_sock).setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable reuse for TCP socket
+    tcp_sock.bind((local_ip, TCP_PORT))
+    tcp_sock.listen(1)
+    tcp_sock.setblocking(False)
 
   def send_udp_message(self):
     if self.ip:
@@ -149,7 +161,7 @@ class Streamer:
       except BlockingIOError:
         pass
 
-  def send_tcp_message(self):
+  def send_tcp_message(self, is_offroad):
     if self.tcp_conn:
       try:
         (sm := self.sm).update(10)
@@ -164,7 +176,7 @@ class Streamer:
         # TODO include bukapilot changes in selfdrive/updated.py
         sett['updateStatus'] = safe_get("UpdaterState")
 
-        sett['isOffroad'] = safe_get("IsOffroad", bool_value=True)
+        sett['isOffroad'] = is_offroad
         sett['enableBukapilot'] = safe_get("OpenpilotEnabledToggle", bool_value=True)
         sett['quietMode'] = safe_get("QuietMode", bool_value=True)
         sett['enableAssistedLaneChange'] = safe_get("IsAlcEnabled", bool_value=True)
@@ -211,17 +223,16 @@ class Streamer:
     except Exception:
       pass
 
-  def receive_tcp_message(self):
+  def receive_tcp_message(self, is_offroad):
     if self.tcp_conn:
       try:
         message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
         if message:
           try:
             settings = msgpack.unpackb(message)
-            offroad = params.get_bool("IsOffroad")
             self.requestInfo = settings['requestDeviceInfo']
 
-            if offroad and not self.requestInfo:
+            if is_offroad and not self.requestInfo:
               # Set values
               # print("\nPutting parameters")
               mapping={
@@ -251,8 +262,9 @@ class Streamer:
       self.receive_udp_message()
       self.send_udp_message()
       self.accept_new_connection()
-      self.receive_tcp_message()
-      self.send_tcp_message()
+      self.receive_tcp_message(is_offroad := params.get_bool("IsOffroad"))
+      self.send_tcp_message(is_offroad)
+      self.check_calibration(is_offroad)
       self.rk.keep_time()
 
   def close_connections(self):
