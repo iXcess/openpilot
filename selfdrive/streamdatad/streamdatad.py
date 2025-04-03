@@ -113,7 +113,7 @@ class Streamer:
     self.sm = sm if sm \
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
       'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
-      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan', 'onroadEvents'])
+      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan'])
     self.rk = Ratekeeper(30)  # Ratekeeper for 30 Hz loop
     self.last_calibration_sent = 0
 
@@ -149,10 +149,9 @@ class Streamer:
       data.update(sm['carControl'].to_dict())
       data.update(sm['deviceState'].to_dict())
       data.update(sm['driverStateV2'].to_dict())
-      data.update(sm['controlsState'].to_dict())
+      data.update(filter_keys(sm['controlsState'].to_dict(), ["vCruiseCluster", "alertText1", "alertText2", "alertSize", "alertStatus"]))
       data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode", "events"]))
       data.update(filter_keys(sm['longitudinalPlan'].to_dict(), ["personality"]))
-      data.update({"onroadEvents": [e.to_dict() for e in sm['onroadEvents']]})
 
       # Pack and send
       message = msgpack.packb(data)
@@ -168,8 +167,6 @@ class Streamer:
         sett = {}
         sett['connectivityStatus'] = str(sm['deviceState'].networkType)
         sett['deviceStatus'] = deviceStatus(sm)
-        controlsState = sm['controlsState']
-        sett['alerts'] = f"{controlsState.alertText1}\n{controlsState.alertText2}"
         sett['remainingDataUpload'] = remainingDataUpload(sm)
         # TODO send uploadStatus in selfdrive/loggerd/uploader.py
         sett['gitCommit'] = get_commit()[:7]
