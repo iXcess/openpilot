@@ -14,6 +14,7 @@ BUFFER_SIZE = 1024
 UDP_PORT = 5006
 TCP_PORT = 5007
 params = Params()
+dongleID = params.get("DongleId").decode("utf-8")
 
 def extract_model_data(model_dict):
   # Extract position and acceleration
@@ -166,13 +167,14 @@ class Streamer:
       try:
         (sm := self.sm).update(10)
         sett = {}
+        sett['dongleID'] = dongleID
         sett['connectivityStatus'] = str(sm['deviceState'].networkType)
         sett['deviceStatus'] = deviceStatus(sm)
         sett['remainingDataUpload'] = remainingDataUpload(sm)
         # TODO send uploadStatus in selfdrive/loggerd/uploader.py
         sett['gitCommit'] = get_commit()[:7]
         # TODO include bukapilot changes in selfdrive/updated.py
-        sett['updateStatus'] = safe_get("UpdaterState")
+        #sett['updateStatus'] = safe_get("UpdaterState")
 
         sett['isOffroad'] = is_offroad
         sett['enableBukapilot'] = safe_get("OpenpilotEnabledToggle", bool_value=True)
@@ -192,13 +194,12 @@ class Streamer:
 
         if self.requestInfo:
           sett['requestDeviceInfo'] = True
-          sett['dongleID'] = safe_get("DongleId", decode_utf8=True)
           sett['serial'] = safe_get("HardwareSerial", decode_utf8=True)
-          sett['hostname'] = socket.gethostname()
+          #sett['hostname'] = socket.gethostname()
           sett['currentVersion'] = get_version()
           sett['osVersion'] = HARDWARE.get_os_version()
           sett['currentBranch'] = get_short_branch()
-          sett['currentChangelog'] = safe_get("UpdaterCurrentReleaseNotes")
+          #sett['currentChangelog'] = safe_get("UpdaterCurrentReleaseNotes")
           self.requestInfo = False
 
         self.tcp_conn.sendall(msgpack.packb(sett))
@@ -217,7 +218,8 @@ class Streamer:
   def receive_udp_message(self):
     try:
       message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)
-      self.ip = addr[0]  # Update client IP
+      if message and dongleID in msgpack.unpackb(message):
+        self.ip = addr[0]  # Update client IP
     except Exception:
       pass
 
