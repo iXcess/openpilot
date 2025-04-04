@@ -210,8 +210,8 @@ class Ka2(HardwareBase):
       }
 
   def get_imei(self, slot):
-    # generate fake 15 digit imei from eth0 mac address
-    mac = subprocess.getoutput("cat /sys/class/net/eth0/address")
+    # generate fake 15 digit imei from wlan0 mac address
+    mac = subprocess.getoutput("cat /sys/class/net/wlan0/address")
     clean_mac = mac.replace(':', '').replace('-', '')
 
     return hashlib.sha256(clean_mac.encode()).hexdigest()[:15]
