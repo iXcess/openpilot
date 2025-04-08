@@ -211,7 +211,6 @@ class Streamer:
     if not self.tcp_conn:
       try:
         self.tcp_conn, addr = self.tcp_sock.accept()
-        self.ip = addr[0]  # Update client IP for UDP messages
       except socket.error:
         pass
 
@@ -231,8 +230,9 @@ class Streamer:
           try:
             settings = msgpack.unpackb(message)
             self.requestInfo = settings['requestDeviceInfo']
+            dongleIdList = settings.get('dongleIdList', [])
 
-            if is_offroad and not self.requestInfo:
+            if is_offroad and dongleID in dongleIdList and not self.requestInfo:
               # Set values
               # print("\nPutting parameters")
               mapping={
