@@ -151,7 +151,7 @@ class Streamer:
       data.update(sm['carControl'].to_dict())
       data.update(sm['deviceState'].to_dict())
       data.update(sm['driverStateV2'].to_dict())
-      data.update(filter_keys(sm['controlsState'].to_dict(), ["vCruiseCluster", "alertText1", "alertText2", "alertSize", "alertStatus"]))
+      data.update(sm['controlsState'].to_dict()) # Send full controlsState
       data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode", "events"]))
       data.update(filter_keys(sm['longitudinalPlan'].to_dict(), ["personality"]))
 
