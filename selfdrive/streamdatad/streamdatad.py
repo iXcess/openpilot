@@ -115,7 +115,7 @@ class Streamer:
       else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
       'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
       'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan'])
-    self.rk = Ratekeeper(30)  # Ratekeeper for 30 Hz loop
+    self.rk = Ratekeeper(20)  # Ratekeeper for 20 Hz loop
     self.last_calibration_sent = 0
 
     self.setup_sockets()
