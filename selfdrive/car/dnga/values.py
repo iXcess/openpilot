@@ -15,7 +15,7 @@ class DNGAPlatformConfig(PlatformConfig):
 
 class CANBUS:
   main_bus = 0
-  cam_bus = 1
+  cam_bus = 2
 
 class DNGAFlags(IntFlag):
   HYBRID = 1
@@ -55,5 +55,6 @@ class CAR(Platforms):
 BRAKE_SCALE = defaultdict(lambda: 1, {CAR.ATIVA: 3.3, CAR.MYVI: 3.3, CAR.ALZA: 2.6, CAR.VIOS: 3.2})
 
 SNG_CAR = CAR.with_flags(DNGAFlags.SNG)
+HYBRID_CAR = CAR.with_flags(DNGAFlags.HYBRID)
 CAR_INFO = CAR.create_carinfo_map()
 DBC = CAR.create_dbc_map()

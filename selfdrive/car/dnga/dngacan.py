@@ -1,11 +1,11 @@
 from openpilot.common.numpy_fast import clip
 from openpilot.common.conversions import Conversions as CV
 
-def create_can_steer_command(packer, steer, steer_req):
-  """Creates a CAN message for the Perodua LKA Steer Command."""
-
+def create_can_steer_command(packer, steer, steer_req, cnt):
+  print(steer, cnt)
   values = {
     "STEER_REQ": steer_req,
+    "STEERING_COUNTER": cnt,
     "STEER_CMD": -steer if steer_req else 0,
     "SET_ME_1": 1,
     "SET_ME_1_2": 1,
@@ -32,7 +32,7 @@ def create_brake_command(packer, enabled, decel_req, pump, decel_cmd, aeb):
   # Value overflow check
   # MAGNITUDE a max value 2.0 to prevent overflow, maximum seen on porto is 1.56
   # PUMP_REACTION{N} has a max value of 1.2, maximum seen on porto is 1.0
-  decel_req = clip(decel_req, 0., 0.5)
+  decel_req = clip(decel_req, 0., 1.56)
   pump = clip(pump, 0., 1.0)
 
   values = {
