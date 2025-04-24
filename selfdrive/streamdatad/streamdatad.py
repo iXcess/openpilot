@@ -20,7 +20,8 @@ def extract_model_data(model_dict):
   # Extract position and acceleration
   extracted_data = {
     "position": model_dict.get("position"),
-    "acceleration": model_dict.get("acceleration")
+    "acceleration": model_dict.get("acceleration"),
+    "frameId": model_dict.get("frameId"),
   }
 
   # Flatten laneLines and roadEdges efficiently with single lookup
