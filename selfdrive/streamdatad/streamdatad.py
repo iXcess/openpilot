@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import socket
 import msgpack
 from time import monotonic
@@ -66,19 +65,18 @@ def safe_get(key, default_value='', decode_utf8=False, to_float=False, bool_valu
     print(f"Exception occurred while retrieving key '{key}': {e}")
     return default_value  # Return the default value in case of an exception
 
-def safe_put_all(settings_to_put, mapping, non_bool_values=None):
+def safe_put_all(settings_to_put, non_bool_values=None):
   """
   Safely sets multiple parameter values from the settings dictionary.
-  :param settings: The settings dictionary containing the values.
-  :param mapping: A dictionary mapping param keys to their respective settings keys.
+  :param settings_to_put: The settings dictionary containing the values.
   :param non_bool_values: A set of param keys to be treated as non-boolean.
   """
   if non_bool_values is None:
     non_bool_values = set()  # Default to an empty set if not provided
 
-  for param_key, settings_key in mapping.items():
+  for param_key in settings_to_put:
     try:
-      value = settings_to_put[settings_key]  # Retrieve the value from the settings dictionary
+      value = settings_to_put[param_key]  # Retrieve the value directly from settings_to_put
       if param_key in non_bool_values:
         params.put(param_key, str(value))  # Convert the value to a string and set it
       else:
@@ -86,10 +84,10 @@ def safe_put_all(settings_to_put, mapping, non_bool_values=None):
           continue  # Skip if the value is expected to be boolean but isn't
         params.put_bool(param_key, value)  # Set the value as boolean
     except KeyError:
-      # Skip if the settings key does not exist
+      # Skip if the key does not exist
       pass
     except Exception as e:
-      print(f"Exception occurred while setting param '{param_key}' with value from '{settings_key}': {e}")
+      print(f"Exception occurred while setting param '{param_key}': {e}")
 
 def deviceStatus(sm):
   if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
@@ -105,10 +103,8 @@ def remainingDataUpload(sm):
 
 class Streamer:
   def __init__(self, sm=None):
-    #self.local_ip = "192.168.100.1"
     self.local_ip = "0.0.0.0"  # Bind to all network interfaces, allowing connections from any available network.
     self.ip = None
-    self.requestInfo = False
     self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
@@ -172,36 +168,39 @@ class Streamer:
         sett['connectivityStatus'] = str(sm['deviceState'].networkType)
         sett['deviceStatus'] = deviceStatus(sm)
         sett['remainingDataUpload'] = remainingDataUpload(sm)
-        # TODO send uploadStatus in selfdrive/loggerd/uploader.py
         sett['gitCommit'] = get_commit()[:7]
-        # TODO include bukapilot changes in selfdrive/updated.py
-        #sett['updateStatus'] = safe_get("UpdaterState")
-
         sett['isOffroad'] = is_offroad
-        sett['enableBukapilot'] = safe_get("OpenpilotEnabledToggle", bool_value=True)
-        sett['quietMode'] = safe_get("QuietMode", bool_value=True)
-        sett['enableAssistedLaneChange'] = safe_get("IsAlcEnabled", bool_value=True)
-        sett['enableLaneDepartureWarning'] = safe_get("IsLdwEnabled", bool_value=True)
-        sett['uploadVideoWiFiOnly'] = safe_get("LogVideoWifiOnly", bool_value=True)
-        sett['apn'] = safe_get("GsmApn")
-        sett['enableRoaming'] = safe_get("GsmRoaming", bool_value=True)
-        sett['driverPersonality'] = safe_get("LongitudinalPersonality", decode_utf8=True)
-        sett['useMetricSystem'] = safe_get("IsMetric", bool_value=True)
-        sett['enableSSH'] = safe_get("SshEnabled", bool_value=True)
-        sett['experimentalModel'] = safe_get("ExperimentalMode", bool_value=True)
-        sett['recordUploadDriverCamera'] = safe_get("RecordFront", bool_value=True)
-        sett['featurePackage'] = safe_get("FeaturesPackage")
-        sett['fixFingerprint'] = safe_get("FixFingerprint")
+        sett['currentVersion'] = get_version()
+        sett['osVersion'] = HARDWARE.get_os_version()
+        sett['currentBranch'] = get_short_branch()
 
-        if self.requestInfo:
-          sett['requestDeviceInfo'] = True
-          sett['serial'] = safe_get("HardwareSerial", decode_utf8=True)
-          #sett['hostname'] = socket.gethostname()
-          sett['currentVersion'] = get_version()
-          sett['osVersion'] = HARDWARE.get_os_version()
-          sett['currentBranch'] = get_short_branch()
-          #sett['currentChangelog'] = safe_get("UpdaterCurrentReleaseNotes")
-          self.requestInfo = False
+        # Define the keys for each category
+        bool_keys = [
+          'OpenpilotEnabledToggle', 'QuietMode', 'IsAlcEnabled', 'IsLdwEnabled',
+          'LogVideoWifiOnly', 'GsmRoaming', 'IsMetric', 'SshEnabled',
+          'ExperimentalMode', 'RecordFront'
+        ]
+
+        decode_utf8_keys = [
+          'LongitudinalPersonality', 'HardwareSerial'
+        ]
+
+        # Define non-boolean keys without special treatment
+        non_bool_keys = [
+          'GsmApn', 'FeaturesPackage', 'FixFingerprint'
+        ]
+
+        # Set boolean values
+        for key in bool_keys:
+          sett[key] = safe_get(key, bool_value=True)
+
+        # Set UTF-8 decoded values
+        for key in decode_utf8_keys:
+          sett[key] = safe_get(key, decode_utf8=True)
+
+        # Set non-boolean values
+        for key in non_bool_keys:
+          sett[key] = safe_get(key)
 
         self.tcp_conn.sendall(msgpack.packb(sett))
 
@@ -230,27 +229,13 @@ class Streamer:
         if message:
           try:
             settings = msgpack.unpackb(message)
-            self.requestInfo = settings['requestDeviceInfo']
             dongleIdList = settings.get('dongleIdList', [])
 
-            if is_offroad and dongleID in dongleIdList and not self.requestInfo:
+            if is_offroad and dongleID in dongleIdList:
               # Set values
               # print("\nPutting parameters")
-              mapping={
-                "OpenpilotEnabledToggle":"enableBukapilot",
-                "QuietMode":"quietMode",
-                "IsAlcEnabled":"enableAssistedLaneChange",
-                "IsLdwEnabled":"enableLaneDepartureWarning",
-                "LogVideoWifiOnly":"uploadVideoWiFiOnly",
-                "GsmRoaming":"enableRoaming",
-                "IsMetric":"useMetricSystem",
-                "SshEnabled":"enableSSH",
-                "ExperimentalMode":"experimentalModel",
-                "RecordFront":"recordUploadDriverCamera",
-              }
-
-              # non_bool_values = {}
-              safe_put_all(settings, mapping)
+              non_bool_values = ()
+              safe_put_all(settings, non_bool_values)
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
@@ -279,4 +264,3 @@ def main():
 
 if __name__ == "__main__":
   main()
-
