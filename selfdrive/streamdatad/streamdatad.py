@@ -14,6 +14,7 @@ UDP_PORT = 5006
 TCP_PORT = 5007
 params = Params()
 dongleID = params.get("DongleId").decode("utf-8")
+SM_UPDATE_INTERVAL = 33
 
 def extract_model_data(model_dict):
   # Extract position and acceleration
@@ -111,15 +112,16 @@ class Streamer:
       'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
       'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan'])
     self.rk = Ratekeeper(20)  # Ratekeeper for 20 Hz loop
+    self.last_periodic_time = 0  # Track last periodic task
     self.last_calibration_sent = 0
 
     self.setup_sockets()
 
-  def check_calibration(self, is_offroad):
+  def check_calibration(self, is_offroad, cur_time):
     # Check calibration status and reset if engine on and calibration invalid
     if not is_offroad and self.sm['liveCalibration'].calStatus in \
       (log.LiveCalibrationData.Status.invalid, log.LiveCalibrationData.Status.uncalibrated) \
-      and (cur_time := monotonic()) - self.last_calibration_sent > 0.1:
+      and cur_time - self.last_calibration_sent > 0.1:
         # Reset calibration, retry every 0.1 seconds
         self.last_calibration_sent = cur_time
         params.remove("CalibrationParams")
@@ -136,7 +138,7 @@ class Streamer:
 
   def send_udp_message(self):
     if self.ip:
-      (sm := self.sm).update(10) # update every 10 ms
+      (sm := self.sm).update(SM_UPDATE_INTERVAL)
 
       data = extract_model_data(sm['modelV2'].to_dict())
       data.update(filter_keys(sm['radarState'].to_dict(), ("leadOne", "leadTwo")))
@@ -160,7 +162,7 @@ class Streamer:
   def send_tcp_message(self, is_offroad):
     if self.tcp_conn:
       try:
-        (sm := self.sm).update(10)
+        (sm := self.sm).update(SM_UPDATE_INTERVAL)
         sett = {}
         sett['dongleID'] = dongleID
         sett['connectivityStatus'] = str(sm['deviceState'].networkType)
@@ -227,7 +229,7 @@ class Streamer:
         if message:
           try:
             settings = msgpack.unpackb(message)
-            dongle_list = settings.pop('dongleIdList', [])
+            dongle_list = settings.pop('deviceList', [])
             save_settings = settings.pop('saveSettings', False)
 
             if save_settings and dongleID in dongle_list:
@@ -245,12 +247,16 @@ class Streamer:
   def streamd_thread(self):
     while True:
       self.rk.monitor_time()
-      self.receive_udp_message()
       self.send_udp_message()
-      self.accept_new_connection()
-      self.receive_tcp_message(is_offroad := params.get_bool("IsOffroad"))
-      self.send_tcp_message(is_offroad)
-      self.check_calibration(is_offroad)
+
+      if (cur_time := monotonic()) - self.last_periodic_time >= 0.333: # 3 Hz
+        self.receive_udp_message()
+        self.last_periodic_time = cur_time
+        self.accept_new_connection()
+        self.receive_tcp_message(is_offroad := params.get_bool("IsOffroad"))
+        self.send_tcp_message(is_offroad)
+        self.check_calibration(is_offroad, cur_time)
+
       self.rk.keep_time()
 
   def close_connections(self):
