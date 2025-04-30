@@ -97,9 +97,7 @@ def deviceStatus(sm):
 
 def remainingDataUpload(sm):
   uploader_state = sm['uploaderState']
-  immediate_queue_size = uploader_state.immediateQueueSize
-  raw_queue_size = uploader_state.rawQueueSize
-  return f"{immediate_queue_size + raw_queue_size} MB"
+  return f"{uploader_state.immediateQueueSize + uploader_state.rawQueueSize} MB"
 
 class Streamer:
   def __init__(self, sm=None):
@@ -217,7 +215,7 @@ class Streamer:
   def receive_udp_message(self):
     try:
       message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)
-      if message and dongleID in msgpack.unpackb(message):
+      if message and dongleID in msgpack.unpackb(message): # Assume message only contains dongle ID list
         self.ip = addr[0]  # Update client IP
     except Exception:
       pass
@@ -229,13 +227,15 @@ class Streamer:
         if message:
           try:
             settings = msgpack.unpackb(message)
-            dongleIdList = settings.get('dongleIdList', [])
+            dongle_list = settings.pop('dongleIdList', [])
+            save_settings = settings.pop('saveSettings', False)
 
-            if is_offroad and dongleID in dongleIdList:
-              # Set values
-              # print("\nPutting parameters")
-              non_bool_values = ()
-              safe_put_all(settings, non_bool_values)
+            if save_settings and dongleID in dongle_list:
+              # Settings which can only be saved offroad
+              if is_offroad:
+                # print("\nPutting parameters")
+                # non_bool_values = ()
+                safe_put_all(settings)
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
