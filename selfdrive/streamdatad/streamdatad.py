@@ -16,28 +16,24 @@ params = Params()
 dongleID = params.get("DongleId").decode("utf-8")
 SM_UPDATE_INTERVAL = 33
 
-def extract_model_data(model_dict):
-  # Extract position and acceleration
-  extracted_data = {
-    "position": model_dict.get("position"),
-    "acceleration": model_dict.get("acceleration"),
-    "frameId": model_dict.get("frameId"),
-  }
-
-  # Flatten laneLines and roadEdges efficiently with single lookup
-  for key in ("laneLines", "roadEdges"):
-    value = model_dict.get(key)
+def extract_model_data(data_dict):
+  extracted_data = {key: data_dict.get(key) for key in ("position", "acceleration", "frameId")}
+  list_keys = ("laneLines", "roadEdges")
+  expected_size = len(extracted_data) + sum(len(data_dict.get(key, [])) for key in list_keys)
+  for key in list_keys:
+    value = data_dict.get(key)
     if isinstance(value, list):
-      prefix = key[:-1]
-      extracted_data.update((f"{prefix}{i}", item) for i, item in enumerate(value, 1))
-
+      for i, item in enumerate(value, 1):
+        extracted_data[f"{key[:-1]}{i}"] = item
+        if len(extracted_data) == expected_size:
+          break
   return extracted_data
 
-def filter_keys(model_dict, keys_to_keep):
+def filter_keys(data_dict, keys_to_keep):
   result = {}
   for key in keys_to_keep:
-    if key in model_dict:
-      result[key] = model_dict[key]
+    if key in data_dict:
+      result[key] = data_dict[key]
       if len(result) == len(keys_to_keep):
         break
   return result
@@ -45,7 +41,6 @@ def filter_keys(model_dict, keys_to_keep):
 def safe_get(key, default_value='', decode_utf8=False, to_float=False, bool_value=False):
   """
   Safely retrieves a parameter value while handling exceptions and type conversions.
-  :param params: The params object
   :param key: The parameter key to retrieve
   :param default_value: Default value to return in case of an exception
   :param decode_utf8: Whether to decode the retrieved value as UTF-8
@@ -55,16 +50,18 @@ def safe_get(key, default_value='', decode_utf8=False, to_float=False, bool_valu
   """
   try:
     if bool_value:
-      return params.get_bool(key)  # Get boolean value
-    value = params.get(key) or default_value  # Get the value or default
-    if decode_utf8 and value:
+      return params.get_bool(key)  # Direct boolean retrieval
+    value = params.get(key)
+    if value is None:
+      return default_value  # Early exit for missing values
+    if decode_utf8:
       return value.decode('utf-8')  # Decode UTF-8 if needed
-    if to_float and value:
+    if to_float:
       return float(value)  # Convert to float if needed
-    return value  # Return the retrieved or default value
+    return value  # Return the value as-is
   except Exception as e:
-    print(f"Exception occurred while retrieving key '{key}': {e}")
-    return default_value  # Return the default value in case of an exception
+    print(f"Error retrieving '{key}': {e}")
+    return default_value
 
 def safe_put_all(settings_to_put, non_bool_values=None):
   """
@@ -72,23 +69,21 @@ def safe_put_all(settings_to_put, non_bool_values=None):
   :param settings_to_put: The settings dictionary containing the values.
   :param non_bool_values: A set of param keys to be treated as non-boolean.
   """
-  if non_bool_values is None:
-    non_bool_values = set()  # Default to an empty set if not provided
-
-  for param_key in settings_to_put:
+  non_bool_values = non_bool_values or set()
+  for param_key, value in settings_to_put.items():
     try:
-      value = settings_to_put[param_key]  # Retrieve the value directly from settings_to_put
       if param_key in non_bool_values:
-        params.put(param_key, str(value))  # Convert the value to a string and set it
-      else:
-        if not isinstance(value, bool):
-          continue  # Skip if the value is expected to be boolean but isn't
-        params.put_bool(param_key, value)  # Set the value as boolean
-    except KeyError:
-      # Skip if the key does not exist
-      pass
+        params.put(param_key, str(value))  # Convert non-boolean values to string
+      elif isinstance(value, bool):
+        params.put_bool(param_key, value)  # Store boolean values correctly
     except Exception as e:
-      print(f"Exception occurred while setting param '{param_key}': {e}")
+      print(f"Error setting '{param_key}': {e}")
+
+def safe_put_string(param_key: str, value: str):
+  try:
+    params.put(param_key, value)
+  except Exception as e:
+    print(f"Error setting '{param_key}': {e}")
 
 def deviceStatus(sm):
   if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
@@ -114,7 +109,6 @@ class Streamer:
     self.rk = Ratekeeper(20)  # Ratekeeper for 20 Hz loop
     self.last_periodic_time = 0  # Track last periodic task
     self.last_calibration_sent = 0
-
     self.setup_sockets()
 
   def check_calibration(self, is_offroad, cur_time):
@@ -177,8 +171,7 @@ class Streamer:
         # Define the keys for each category
         bool_keys = [
           'OpenpilotEnabledToggle', 'QuietMode', 'IsAlcEnabled', 'IsLdwEnabled',
-          'LogVideoWifiOnly', 'GsmRoaming', 'IsMetric', 'SshEnabled',
-          'ExperimentalMode', 'RecordFront'
+          'LogVideoWifiOnly', 'IsMetric', 'SshEnabled', 'ExperimentalMode', 'RecordFront'
         ]
 
         decode_utf8_keys = [
@@ -187,7 +180,7 @@ class Streamer:
 
         # Define non-boolean keys without special treatment
         non_bool_keys = [
-          'GsmApn', 'FeaturesPackage', 'FixFingerprint'
+          'FeaturesPackage', 'FixFingerprint'
         ]
 
         # Set boolean values
@@ -230,14 +223,20 @@ class Streamer:
           try:
             settings = msgpack.unpackb(message)
             dongle_list = settings.pop('deviceList', [])
-            save_settings = settings.pop('saveSettings', False)
+            msg_type = settings.pop('msgType', None)
 
-            if save_settings and dongleID in dongle_list:
-              # Settings which can only be saved offroad
-              if is_offroad:
+            if dongleID in dongle_list:
+              if msg_type == 'saveSettings' and is_offroad:
                 # print("\nPutting parameters")
                 # non_bool_values = ()
                 safe_put_all(settings)
+              elif msg_type == 'savePersonality':
+                print(settings['personality'])
+                safe_put_string('LongitudinalPersonality', settings['personality'])
+              elif msg_type == 'saveFingerprint':
+                print(settings)
+              elif msg_type == 'saveFeatures':
+                print(settings)
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
