@@ -79,12 +79,6 @@ def safe_put_all(settings_to_put, non_bool_values=None):
     except Exception as e:
       print(f"Error setting '{param_key}': {e}")
 
-def safe_put_string(param_key: str, value: str):
-  try:
-    params.put(param_key, value)
-  except Exception as e:
-    print(f"Error setting '{param_key}': {e}")
-
 def deviceStatus(sm):
   if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
     return "error"
@@ -226,17 +220,10 @@ class Streamer:
             msg_type = settings.pop('msgType', None)
 
             if dongleID in dongle_list:
-              if msg_type == 'saveSettings' and is_offroad:
-                # print("\nPutting parameters")
-                # non_bool_values = ()
+              if msg_type == 'saveToggles' and is_offroad:
                 safe_put_all(settings)
-              elif msg_type == 'savePersonality':
-                print(settings['personality'])
-                safe_put_string('LongitudinalPersonality', settings['personality'])
-              elif msg_type == 'saveFingerprint':
-                print(settings)
-              elif msg_type == 'saveFeatures':
-                print(settings)
+              elif msg_type == 'saveConfig':
+                safe_put_all(settings, settings.keys())
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
