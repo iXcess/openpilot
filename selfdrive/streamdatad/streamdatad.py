@@ -21,12 +21,11 @@ def extract_model_data(data_dict):
   list_keys = ("laneLines", "roadEdges")
   expected_size = len(extracted_data) + sum(len(data_dict.get(key, [])) for key in list_keys)
   for key in list_keys:
-    value = data_dict.get(key)
-    if isinstance(value, list):
+    if (value := data_dict.get(key)) and isinstance(value, list):
       for i, item in enumerate(value, 1):
         extracted_data[f"{key[:-1]}{i}"] = item
         if len(extracted_data) == expected_size:
-          break
+          return extracted_data
   return extracted_data
 
 def filter_keys(data_dict, keys_to_keep):
@@ -38,29 +37,24 @@ def filter_keys(data_dict, keys_to_keep):
         break
   return result
 
-def safe_get(key, default_value='', decode_utf8=False, to_float=False, bool_value=False):
+def safe_get(key, default_value='', bool_value=False):
   """
   Safely retrieves a parameter value while handling exceptions and type conversions.
   :param key: The parameter key to retrieve
   :param default_value: Default value to return in case of an exception
-  :param decode_utf8: Whether to decode the retrieved value as UTF-8
-  :param to_float: Whether to convert the value to float
-  :param bool_value: Whether to retrieve the value as boolean
+  :param bool_value: Whether to retrieve the value as a boolean
   :return: The retrieved value or the default value
   """
   try:
     if bool_value:
-      return params.get_bool(key)  # Direct boolean retrieval
+      return params.get_bool(key) or bool(default_value)
     value = params.get(key)
     if value is None:
-      return default_value  # Early exit for missing values
-    if decode_utf8:
-      return value.decode('utf-8')  # Decode UTF-8 if needed
-    if to_float:
-      return float(value)  # Convert to float if needed
-    return value  # Return the value as-is
-  except Exception as e:
-    print(f"Error retrieving '{key}': {e}")
+      return default_value
+    if isinstance(value, bytes):
+      value = value.decode('utf-8')
+    return value
+  except Exception:
     return default_value
 
 def safe_put_all(settings_to_put, non_bool_values=None):
@@ -69,21 +63,19 @@ def safe_put_all(settings_to_put, non_bool_values=None):
   :param settings_to_put: The settings dictionary containing the values.
   :param non_bool_values: A set of param keys to be treated as non-boolean.
   """
-  non_bool_values = non_bool_values or set()
-  for param_key, value in settings_to_put.items():
-    try:
-      if param_key in non_bool_values:
-        params.put(param_key, str(value))  # Convert non-boolean values to string
-      elif isinstance(value, bool):
-        params.put_bool(param_key, value)  # Store boolean values correctly
-    except Exception as e:
-      print(f"Error setting '{param_key}': {e}")
+  if non_bool_values is None:
+    non_bool_values = set()
+  try:
+    for param_key, value in settings_to_put.items():
+      params.put_bool(param_key, value) if param_key not in non_bool_values else params.put(param_key, str(value))
+  except Exception as e:
+    print(f"Error putting '{param_key}': {e}")
 
 def deviceStatus(sm):
   if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
     return "error"
-  else: # TODO: Add initialising if alerts.hasSevere from k_alerts
-    return "ready"
+  # TODO: Add initialising if alerts.hasSevere from k_alerts
+  return "ready"
 
 def remainingDataUpload(sm):
   uploader_state = sm['uploaderState']
@@ -116,8 +108,7 @@ class Streamer:
         params.remove("LiveTorqueParameters")
 
   def setup_sockets(self):
-    local_ip = self.local_ip
-    (udp_sock := self.udp_sock).bind((local_ip, UDP_PORT))
+    (udp_sock := self.udp_sock).bind(((local_ip := self.local_ip), UDP_PORT))
     udp_sock.setblocking(False)
     (tcp_sock := self.tcp_sock).setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable reuse for TCP socket
     tcp_sock.bind((local_ip, TCP_PORT))
@@ -127,40 +118,37 @@ class Streamer:
   def send_udp_message(self):
     if self.ip:
       (sm := self.sm).update(SM_UPDATE_INTERVAL)
-
-      data = extract_model_data(sm['modelV2'].to_dict())
-      data.update(filter_keys(sm['radarState'].to_dict(), ("leadOne", "leadTwo")))
+      (data := extract_model_data(sm['modelV2'].to_dict())).update(filter_keys(sm['radarState'].to_dict(), ("leadOne", "leadTwo")))
       data.update(filter_keys(sm['liveCalibration'].to_dict(), ["height"]))
       data.update(filter_keys(sm['carParams'].to_dict(), "openpilotLongitudinalControl"))
       data.update(filter_keys(sm['carState'].to_dict(), ["vEgoCluster"]))
       data.update(sm['carControl'].to_dict())
       data.update(sm['deviceState'].to_dict())
       data.update(sm['driverStateV2'].to_dict())
-      data.update(sm['controlsState'].to_dict()) # Send full controlsState
+      data.update(sm['controlsState'].to_dict())
       data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode", "events"]))
       data.update(filter_keys(sm['longitudinalPlan'].to_dict(), ["personality"]))
 
       # Pack and send
-      message = msgpack.packb(data)
       try:
-        self.udp_sock.sendto(message, (self.ip, UDP_PORT))
+        self.udp_sock.sendto(msgpack.packb(data), (self.ip, UDP_PORT))
       except BlockingIOError:
         pass
 
   def send_tcp_message(self, is_offroad):
     if self.tcp_conn:
       try:
-        (sm := self.sm).update(SM_UPDATE_INTERVAL)
-        sett = {}
+        self.sm.update(SM_UPDATE_INTERVAL)
+        #(sm := self.sm).update(SM_UPDATE_INTERVAL)
+        sett = {'isOffroad': is_offroad}
         sett['dongleID'] = dongleID
-        sett['connectivityStatus'] = str(sm['deviceState'].networkType)
-        sett['deviceStatus'] = deviceStatus(sm)
-        sett['remainingDataUpload'] = remainingDataUpload(sm)
         sett['gitCommit'] = get_commit()[:7]
-        sett['isOffroad'] = is_offroad
         sett['currentVersion'] = get_version()
         sett['osVersion'] = HARDWARE.get_os_version()
         sett['currentBranch'] = get_short_branch()
+        #sett['connectivityStatus'] = str(sm['deviceState'].networkType)
+        #sett['deviceStatus'] = deviceStatus(sm)
+        #sett['remainingDataUpload'] = remainingDataUpload(sm)
 
         # Define the keys for each category
         bool_keys = [
@@ -168,27 +156,12 @@ class Streamer:
           'LogVideoWifiOnly', 'IsMetric', 'SshEnabled', 'ExperimentalMode', 'RecordFront'
         ]
 
-        decode_utf8_keys = [
-          'LongitudinalPersonality', 'HardwareSerial'
+        string_keys = [
+          'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint'
         ]
 
-        # Define non-boolean keys without special treatment
-        non_bool_keys = [
-          'FeaturesPackage', 'FixFingerprint'
-        ]
-
-        # Set boolean values
-        for key in bool_keys:
-          sett[key] = safe_get(key, bool_value=True)
-
-        # Set UTF-8 decoded values
-        for key in decode_utf8_keys:
-          sett[key] = safe_get(key, decode_utf8=True)
-
-        # Set non-boolean values
-        for key in non_bool_keys:
-          sett[key] = safe_get(key)
-
+        sett.update({key: safe_get(key, bool_value=True) for key in bool_keys})
+        sett.update({key: safe_get(key) for key in string_keys})
         self.tcp_conn.sendall(msgpack.packb(sett))
 
       except socket.error:
@@ -212,15 +185,12 @@ class Streamer:
   def receive_tcp_message(self, is_offroad):
     if self.tcp_conn:
       try:
-        message = self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)
-        if message:
+        if (message := self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)):
           try:
             settings = msgpack.unpackb(message)
-            dongle_list = settings.pop('deviceList', [])
-            msg_type = settings.pop('msgType', None)
 
-            if dongleID in dongle_list:
-              if msg_type == 'saveToggles' and is_offroad:
+            if dongleID in settings.pop('deviceList', []):
+              if (msg_type := settings.pop('msgType', None)) == 'saveToggles' and is_offroad:
                 safe_put_all(settings)
               elif msg_type == 'saveConfig':
                 safe_put_all(settings, settings.keys())
