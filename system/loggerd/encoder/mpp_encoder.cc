@@ -29,7 +29,6 @@ MppEncoder::MppEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
 
 MppEncoder::~MppEncoder() {
   encoder_close();
-  mpp_destroy(mpp_ctx);
 
   if (is_downscale) {
     free(downscale_buf);
@@ -97,7 +96,7 @@ void MppEncoder::encoder_open(const char* path) {
 
 void MppEncoder::encoder_close() {
     if (!is_open) return;
-
+    mpp_destroy(mpp_ctx);
     is_open = false;
 }
 
