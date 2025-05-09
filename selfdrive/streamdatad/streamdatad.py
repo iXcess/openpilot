@@ -5,7 +5,8 @@ from time import monotonic
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 from cereal import log
-from openpilot.system.version import get_version, get_commit, get_short_branch
+from openpilot.system.version import get_version, get_commit
+# from openpilot.system.version import get_short_branch
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 
@@ -28,48 +29,21 @@ def extract_model_data(data_dict):
           return extracted_data
   return extracted_data
 
-def filter_keys(data_dict, keys_to_keep):
-  result = {}
-  for key in keys_to_keep:
-    if key in data_dict:
-      result[key] = data_dict[key]
-      if len(result) == len(keys_to_keep):
-        break
-  return result
-
-def safe_get(key, default_value='', bool_value=False):
-  """
-  Safely retrieves a parameter value while handling exceptions and type conversions.
-  :param key: The parameter key to retrieve
-  :param default_value: Default value to return in case of an exception
-  :param bool_value: Whether to retrieve the value as a boolean
-  :return: The retrieved value or the default value
-  """
+def safe_get(key, is_bool=False):
   try:
-    if bool_value:
-      return params.get_bool(key) or bool(default_value)
-    value = params.get(key)
-    if value is None:
-      return default_value
-    if isinstance(value, bytes):
-      value = value.decode('utf-8')
-    return value
+    return params.get_bool(key) if is_bool else params.get(key).decode('utf-8')
   except Exception:
-    return default_value
+    return False if is_bool else ''
 
-def safe_put_all(settings_to_put, non_bool_values=None):
-  """
-  Safely sets multiple parameter values from the settings dictionary.
-  :param settings_to_put: The settings dictionary containing the values.
-  :param non_bool_values: A set of param keys to be treated as non-boolean.
-  """
-  if non_bool_values is None:
-    non_bool_values = set()
+def safe_put_all(settings_to_put, is_bool=False):
   try:
     for param_key, value in settings_to_put.items():
-      params.put_bool(param_key, value) if param_key not in non_bool_values else params.put(param_key, str(value))
+      if is_bool:
+        params.put_bool(param_key, value)
+      else:
+        params.put(param_key, str(value))
   except Exception as e:
-    print(f"Error putting '{param_key}': {e}")
+    print(f"Error putting parameter: {e}")
 
 def deviceStatus(sm):
   if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
@@ -80,6 +54,19 @@ def deviceStatus(sm):
 def remainingDataUpload(sm):
   uploader_state = sm['uploaderState']
   return f"{uploader_state.immediateQueueSize + uploader_state.rawQueueSize} MB"
+
+def reset_calibration(is_offroad, calStatus):
+  # If car is on and not re-calibrating
+  if not is_offroad and calStatus != log.LiveCalibrationData.Status.recalibrating:
+    params.remove("CalibrationParams")
+    params.remove("LiveTorqueParameters")
+
+def do_reboot(state):
+  if state == log.ControlsState.OpenpilotState.disabled:
+    params.put_bool("DoReboot", True)
+
+def update_dict_from_sm(target_dict, sm_subset, key):
+  target_dict[key] = str(getattr(sm_subset, key))
 
 class Streamer:
   def __init__(self, sm=None):
@@ -94,18 +81,7 @@ class Streamer:
       'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan'])
     self.rk = Ratekeeper(20)  # Ratekeeper for 20 Hz loop
     self.last_periodic_time = 0  # Track last periodic task
-    self.last_calibration_sent = 0
     self.setup_sockets()
-
-  def check_calibration(self, is_offroad, cur_time):
-    # Check calibration status and reset if engine on and calibration invalid
-    if not is_offroad and self.sm['liveCalibration'].calStatus in \
-      (log.LiveCalibrationData.Status.invalid, log.LiveCalibrationData.Status.uncalibrated) \
-      and cur_time - self.last_calibration_sent > 0.1:
-        # Reset calibration, retry every 0.1 seconds
-        self.last_calibration_sent = cur_time
-        params.remove("CalibrationParams")
-        params.remove("LiveTorqueParameters")
 
   def setup_sockets(self):
     (udp_sock := self.udp_sock).bind(((local_ip := self.local_ip), UDP_PORT))
@@ -115,19 +91,22 @@ class Streamer:
     tcp_sock.listen(1)
     tcp_sock.setblocking(False)
 
-  def send_udp_message(self):
+  def send_udp_message(self, is_metric):
     if self.ip:
-      (sm := self.sm).update(SM_UPDATE_INTERVAL)
-      (data := extract_model_data(sm['modelV2'].to_dict())).update(filter_keys(sm['radarState'].to_dict(), ("leadOne", "leadTwo")))
-      data.update(filter_keys(sm['liveCalibration'].to_dict(), ["height"]))
-      data.update(filter_keys(sm['carParams'].to_dict(), "openpilotLongitudinalControl"))
-      data.update(filter_keys(sm['carState'].to_dict(), ["vEgoCluster"]))
-      data.update(sm['carControl'].to_dict())
+      (data := extract_model_data((sm := self.sm)['modelV2'].to_dict())).update(sm['carControl'].to_dict())
+      if is_metric is not None:
+        data["IsMetric"] = is_metric
       data.update(sm['deviceState'].to_dict())
       data.update(sm['driverStateV2'].to_dict())
       data.update(sm['controlsState'].to_dict())
-      data.update(filter_keys(sm['driverMonitoringState'].to_dict(), ["isActiveMode", "events"]))
-      data.update(filter_keys(sm['longitudinalPlan'].to_dict(), ["personality"]))
+      update_dict_from_sm(data, sm['radarState'], "leadOne")
+      update_dict_from_sm(data, sm['radarState'], "leadTwo")
+      update_dict_from_sm(data, sm['driverMonitoringState'], "isActiveMode")
+      update_dict_from_sm(data, sm['driverMonitoringState'], "events")
+      update_dict_from_sm(data, sm['liveCalibration'], "height")
+      update_dict_from_sm(data, sm['carParams'], "openpilotLongitudinalControl")
+      update_dict_from_sm(data, sm['carState'], "vEgoCluster")
+      update_dict_from_sm(data, sm['longitudinalPlan'], "personality")
 
       # Pack and send
       try:
@@ -135,33 +114,36 @@ class Streamer:
       except BlockingIOError:
         pass
 
-  def send_tcp_message(self, is_offroad):
+  def send_tcp_message(self, is_offroad, calStatus, state, is_metric):
     if self.tcp_conn:
       try:
-        self.sm.update(SM_UPDATE_INTERVAL)
-        #(sm := self.sm).update(SM_UPDATE_INTERVAL)
         sett = {'isOffroad': is_offroad}
         sett['dongleID'] = dongleID
         sett['gitCommit'] = get_commit()[:7]
         sett['currentVersion'] = get_version()
         sett['osVersion'] = HARDWARE.get_os_version()
-        sett['currentBranch'] = get_short_branch()
-        #sett['connectivityStatus'] = str(sm['deviceState'].networkType)
+        sett["state"] = str(state)
+        sett["calStatus"] = str(calStatus)
+        sett['IsMetric'] = is_metric
+        #update_dict_from_sm(sett, (sm := self.sm)['deviceState'], "connectivityStatus")
+        #sett['currentBranch'] = get_short_branch()
         #sett['deviceStatus'] = deviceStatus(sm)
         #sett['remainingDataUpload'] = remainingDataUpload(sm)
 
         # Define the keys for each category
         bool_keys = [
           'OpenpilotEnabledToggle', 'QuietMode', 'IsAlcEnabled', 'IsLdwEnabled',
-          'LogVideoWifiOnly', 'IsMetric', 'SshEnabled', 'ExperimentalMode', 'RecordFront'
+          'LogVideoWifiOnly', 'SshEnabled', 'ExperimentalMode', 'RecordFront'
         ]
 
         string_keys = [
           'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint'
         ]
 
-        sett.update({key: safe_get(key, bool_value=True) for key in bool_keys})
-        sett.update({key: safe_get(key) for key in string_keys})
+        for key in bool_keys:
+          sett[key] = safe_get(key, True)
+        for key in string_keys:
+          sett[key] = safe_get(key)
         self.tcp_conn.sendall(msgpack.packb(sett))
 
       except socket.error:
@@ -177,23 +159,29 @@ class Streamer:
   def receive_udp_message(self):
     try:
       message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)
-      if message and dongleID in msgpack.unpackb(message): # Assume message only contains dongle ID list
+      if message and dongleID in msgpack.unpackb(message): # Message only contains dongle ID list
         self.ip = addr[0]  # Update client IP
     except Exception:
       pass
 
-  def receive_tcp_message(self, is_offroad):
+  def receive_tcp_message(self, is_offroad, calStatus, state):
     if self.tcp_conn:
       try:
-        if (message := self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT)):
+        if message := self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT):
           try:
             settings = msgpack.unpackb(message)
 
             if dongleID in settings.pop('deviceList', []):
               if (msg_type := settings.pop('msgType', None)) == 'saveToggles' and is_offroad:
-                safe_put_all(settings)
+                safe_put_all(settings, True)
               elif msg_type == 'saveConfig':
-                safe_put_all(settings, settings.keys())
+                #TODO: Add code to set fingerprint and features
+                safe_put_all(settings)
+              else:
+                if msg_type == 'resetCalibration':
+                  reset_calibration(is_offroad, calStatus)
+                elif msg_type == 'reboot':
+                  do_reboot(state)
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
@@ -202,17 +190,23 @@ class Streamer:
 
   def streamd_thread(self):
     while True:
+      (sm := self.sm).update(SM_UPDATE_INTERVAL)
       self.rk.monitor_time()
-      self.send_udp_message()
+      is_metric = None
 
       if (cur_time := monotonic()) - self.last_periodic_time >= 0.333: # 3 Hz
+        is_metric = params.get_bool("IsMetric")
         self.receive_udp_message()
         self.last_periodic_time = cur_time
         self.accept_new_connection()
-        self.receive_tcp_message(is_offroad := params.get_bool("IsOffroad"))
-        self.send_tcp_message(is_offroad)
-        self.check_calibration(is_offroad, cur_time)
+        self.receive_tcp_message(
+          is_offroad := params.get_bool("IsOffroad"),
+          calStatus := sm['liveCalibration'].calStatus,
+          state := sm['controlsState'].state
+        )
+        self.send_tcp_message(is_offroad, calStatus, state, is_metric)
 
+      self.send_udp_message(is_metric)
       self.rk.keep_time()
 
   def close_connections(self):
