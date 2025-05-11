@@ -57,7 +57,7 @@ def remainingDataUpload(sm):
 
 def reset_calibration(is_offroad, calStatus):
   # If car is on and not re-calibrating
-  if not is_offroad and calStatus != log.LiveCalibrationData.Status.recalibrating:
+  if not is_offroad and calStatus not in (log.LiveCalibrationData.Status.uncalibrated, log.LiveCalibrationData.Status.recalibrating):
     params.remove("CalibrationParams")
     params.remove("LiveTorqueParameters")
 
