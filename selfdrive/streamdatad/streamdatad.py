@@ -55,11 +55,9 @@ def remainingDataUpload(sm):
   uploader_state = sm['uploaderState']
   return f"{uploader_state.immediateQueueSize + uploader_state.rawQueueSize} MB"
 
-def reset_calibration(calStatus):
-  # If not calibrating
-  if calStatus not in (log.LiveCalibrationData.Status.uncalibrated, log.LiveCalibrationData.Status.recalibrating):
-    params.remove("CalibrationParams")
-    params.remove("LiveTorqueParameters")
+def reset_calibration():
+  params.remove("CalibrationParams")
+  params.remove("LiveTorqueParameters")
 
 def do_reboot(state):
   if state == log.ControlsState.OpenpilotState.disabled:
@@ -114,7 +112,7 @@ class Streamer:
       except BlockingIOError:
         pass
 
-  def send_tcp_message(self, is_offroad, calStatus, state, is_metric):
+  def send_tcp_message(self, is_offroad, state, is_metric):
     if self.tcp_conn:
       try:
         sett = {'isOffroad': is_offroad}
@@ -123,7 +121,6 @@ class Streamer:
         sett['currentVersion'] = get_version()
         sett['osVersion'] = HARDWARE.get_os_version()
         sett["state"] = str(state)
-        sett["calStatus"] = str(calStatus)
         sett['IsMetric'] = is_metric
         #update_dict_from_sm(sett, (sm := self.sm)['deviceState'], "connectivityStatus")
         #sett['currentBranch'] = get_short_branch()
@@ -164,7 +161,7 @@ class Streamer:
     except Exception:
       pass
 
-  def receive_tcp_message(self, is_offroad, calStatus, state):
+  def receive_tcp_message(self, is_offroad, state):
     if self.tcp_conn:
       try:
         if message := self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT):
@@ -179,7 +176,7 @@ class Streamer:
                 safe_put_all(settings)
               else:
                 if msg_type == 'resetCalibration':
-                  reset_calibration(calStatus)
+                  reset_calibration()
                 elif msg_type == 'reboot':
                   do_reboot(state)
 
@@ -201,10 +198,9 @@ class Streamer:
         self.accept_new_connection()
         self.receive_tcp_message(
           is_offroad := params.get_bool("IsOffroad"),
-          calStatus := sm['liveCalibration'].calStatus,
           state := sm['controlsState'].state
         )
-        self.send_tcp_message(is_offroad, calStatus, state, is_metric)
+        self.send_tcp_message(is_offroad, state, is_metric)
 
       self.send_udp_message(is_metric)
       self.rk.keep_time()
