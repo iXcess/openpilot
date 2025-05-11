@@ -55,9 +55,9 @@ def remainingDataUpload(sm):
   uploader_state = sm['uploaderState']
   return f"{uploader_state.immediateQueueSize + uploader_state.rawQueueSize} MB"
 
-def reset_calibration(is_offroad, calStatus):
-  # If car is on and not re-calibrating
-  if not is_offroad and calStatus not in (log.LiveCalibrationData.Status.uncalibrated, log.LiveCalibrationData.Status.recalibrating):
+def reset_calibration(calStatus):
+  # If not calibrating
+  if calStatus not in (log.LiveCalibrationData.Status.uncalibrated, log.LiveCalibrationData.Status.recalibrating):
     params.remove("CalibrationParams")
     params.remove("LiveTorqueParameters")
 
@@ -179,7 +179,7 @@ class Streamer:
                 safe_put_all(settings)
               else:
                 if msg_type == 'resetCalibration':
-                  reset_calibration(is_offroad, calStatus)
+                  reset_calibration(calStatus)
                 elif msg_type == 'reboot':
                   do_reboot(state)
 
