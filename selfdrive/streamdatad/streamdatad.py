@@ -130,7 +130,7 @@ class Streamer:
         # Define the keys for each category
         bool_keys = [
           'OpenpilotEnabledToggle', 'QuietMode', 'IsAlcEnabled', 'IsLdwEnabled',
-          'LogVideoWifiOnly', 'SshEnabled', 'ExperimentalMode', 'RecordFront'
+          'SshEnabled', 'ExperimentalMode', 'RecordFront'
         ]
 
         string_keys = [
