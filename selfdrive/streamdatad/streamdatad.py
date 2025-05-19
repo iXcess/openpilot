@@ -94,6 +94,7 @@ class Streamer:
       (data := extract_model_data((sm := self.sm)['modelV2'].to_dict())).update(sm['carControl'].to_dict())
       if is_metric is not None:
         data["IsMetric"] = is_metric
+      data['dongleID'] = dongleID
       data.update(sm['deviceState'].to_dict())
       data.update(sm['driverStateV2'].to_dict())
       data.update(sm['controlsState'].to_dict())
