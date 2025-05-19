@@ -110,8 +110,10 @@ class Streamer:
       # Pack and send
       try:
         self.udp_sock.sendto(msgpack.packb(data), (self.ip, UDP_PORT))
-      except BlockingIOError:
+      except (BlockingIOError, OSError):
         pass
+      except Exception as e:
+        print(f"Unexpected error while sending UDP message: {e}")
 
   def send_tcp_message(self, is_offroad, state, is_metric):
     if self.tcp_conn:
