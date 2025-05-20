@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import socket
 import msgpack
+import subprocess
 from time import monotonic
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
@@ -15,6 +16,9 @@ TCP_PORT = 5007
 params = Params()
 dongleID = params.get("DongleId").decode("utf-8")
 SM_UPDATE_INTERVAL = 33
+
+def check_for_updates():
+  subprocess.run(["pkill", "-SIGUSR1", "-f", "system.updated.updated"], check=False)
 
 def extract_model_data(data_dict):
   extracted_data = {key: data_dict.get(key) for key in ("position", "acceleration", "frameId")}
@@ -185,6 +189,10 @@ class Streamer:
                 elif msg_type == 'tncAccepted':
                   params.put("HasAcceptedTerms", terms_version)
                   params.put("CompletedTrainingVersion", training_version)
+                elif msg_type == 'changeBranch':
+                  if (branch := settings.get('branch', '')):
+                    params.put("UpdaterTargetBranch", branch)
+                    check_for_updates()
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
