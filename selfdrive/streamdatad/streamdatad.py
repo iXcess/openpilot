@@ -5,8 +5,7 @@ from time import monotonic
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 from cereal import log
-from openpilot.system.version import get_version, get_commit
-# from openpilot.system.version import get_short_branch
+from openpilot.system.version import get_version, get_commit, get_short_branch, terms_version, training_version
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 
@@ -126,7 +125,7 @@ class Streamer:
         sett["state"] = str(state)
         sett['IsMetric'] = is_metric
         #update_dict_from_sm(sett, (sm := self.sm)['deviceState'], "connectivityStatus")
-        #sett['currentBranch'] = get_short_branch()
+        sett['currentBranch'] = get_short_branch()
         #sett['deviceStatus'] = deviceStatus(sm)
         #sett['remainingDataUpload'] = remainingDataUpload(sm)
 
@@ -137,7 +136,8 @@ class Streamer:
         ]
 
         string_keys = [
-          'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint'
+          'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint',
+          'UpdaterCurrentReleaseNotes'
         ]
 
         for key in bool_keys:
@@ -182,6 +182,9 @@ class Streamer:
                   reset_calibration()
                 elif msg_type == 'reboot':
                   do_reboot(state)
+                elif msg_type == 'tncAccepted':
+                  params.put("HasAcceptedTerms", terms_version)
+                  params.put("CompletedTrainingVersion", training_version)
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
