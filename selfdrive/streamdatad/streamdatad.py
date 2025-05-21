@@ -6,7 +6,7 @@ from time import monotonic
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 from cereal import log
-from openpilot.system.version import get_version, get_commit, get_short_branch, terms_version, training_version
+from openpilot.system.version import get_version, get_commit, terms_version, training_version
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 
@@ -129,7 +129,6 @@ class Streamer:
         sett["state"] = str(state)
         sett['IsMetric'] = is_metric
         #update_dict_from_sm(sett, (sm := self.sm)['deviceState'], "connectivityStatus")
-        sett['currentBranch'] = get_short_branch()
         #sett['deviceStatus'] = deviceStatus(sm)
         #sett['remainingDataUpload'] = remainingDataUpload(sm)
 
@@ -141,7 +140,7 @@ class Streamer:
 
         string_keys = [
           'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint',
-          'UpdaterCurrentReleaseNotes'
+          'UpdaterCurrentReleaseNotes', 'UpdaterTargetBranch'
         ]
 
         for key in bool_keys:
@@ -189,9 +188,9 @@ class Streamer:
                 elif msg_type == 'tncAccepted':
                   params.put("HasAcceptedTerms", terms_version)
                   params.put("CompletedTrainingVersion", training_version)
-                elif msg_type == 'changeBranch':
-                  if (branch := settings.get('branch', '')):
-                    params.put("UpdaterTargetBranch", branch)
+                elif msg_type == 'changeTargetBranch':
+                  if (targetBranch := settings.get('targetBranch', '')):
+                    params.put("UpdaterTargetBranch", targetBranch)
                     check_for_updates()
 
           except Exception as e:
