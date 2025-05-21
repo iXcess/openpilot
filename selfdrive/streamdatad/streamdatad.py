@@ -18,14 +18,18 @@ dongleID = params.get("DongleId").decode("utf-8")
 SM_UPDATE_INTERVAL = 33
 
 def check_for_updates():
-  subprocess.run(["pkill", "-SIGUSR1", "-f", "system.updated.updated"], check=False)
+  subprocess.run(["pkill", "-SIGUSR1", "-f", "system.updated.updated"])
+
+def fetch_update():
+  subprocess.run(["pkill", "-SIGHUP", "-f", "system.updated.updated"])
 
 def extract_model_data(data_dict):
   extracted_data = {key: data_dict.get(key) for key in ("position", "acceleration", "frameId")}
   list_keys = ("laneLines", "roadEdges")
-  expected_size = len(extracted_data) + sum(len(data_dict.get(key, [])) for key in list_keys)
+  expected_size = len(extracted_data) + sum(len(data_dict.get(k, [])) for k in list_keys)
   for key in list_keys:
-    if (value := data_dict.get(key)) and isinstance(value, list):
+    value = data_dict.get(key)
+    if isinstance(value, list):
       for i, item in enumerate(value, 1):
         extracted_data[f"{key[:-1]}{i}"] = item
         if len(extracted_data) == expected_size:
@@ -128,25 +132,26 @@ class Streamer:
         sett['osVersion'] = HARDWARE.get_os_version()
         sett["state"] = str(state)
         sett['IsMetric'] = is_metric
+
         #update_dict_from_sm(sett, (sm := self.sm)['deviceState'], "connectivityStatus")
         #sett['deviceStatus'] = deviceStatus(sm)
         #sett['remainingDataUpload'] = remainingDataUpload(sm)
 
         # Define the keys for each category
-        bool_keys = [
+        bool_keys = {
           'OpenpilotEnabledToggle', 'QuietMode', 'IsAlcEnabled', 'IsLdwEnabled',
-          'SshEnabled', 'ExperimentalMode', 'RecordFront'
-        ]
+          'SshEnabled', 'ExperimentalMode', 'RecordFront', 'UpdateAvailable',
+          'UpdaterFetchAvailable'
+        }
 
-        string_keys = [
+        string_keys = {
           'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint',
-          'UpdaterCurrentReleaseNotes', 'UpdaterTargetBranch'
-        ]
+          'UpdaterCurrentReleaseNotes', 'UpdaterTargetBranch', 'UpdaterState', 'UpdateFailedCount',
+          'LastUpdateTime'
+        }
 
-        for key in bool_keys:
-          sett[key] = safe_get(key, True)
-        for key in string_keys:
-          sett[key] = safe_get(key)
+        for key in bool_keys | string_keys:
+          sett[key] = safe_get(key, key in bool_keys)
         self.tcp_conn.sendall(msgpack.packb(sett))
 
       except socket.error:
@@ -173,25 +178,34 @@ class Streamer:
         if message := self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT):
           try:
             settings = msgpack.unpackb(message)
-
+            # Check if account is valid
             if dongleID in settings.pop('deviceList', []):
-              if (msg_type := settings.pop('msgType', None)) == 'saveToggles' and is_offroad:
-                safe_put_all(settings, True)
+              if (msg_type := settings.pop('msgType', None)) == 'saveToggles':
+                if is_offroad:
+                  safe_put_all(settings, True)
               elif msg_type == 'saveConfig':
                 #TODO: Add code to set fingerprint and features
                 safe_put_all(settings)
-              else:
-                if msg_type == 'resetCalibration':
-                  reset_calibration()
-                elif msg_type == 'reboot':
-                  do_reboot(state)
-                elif msg_type == 'tncAccepted':
-                  params.put("HasAcceptedTerms", terms_version)
-                  params.put("CompletedTrainingVersion", training_version)
-                elif msg_type == 'changeTargetBranch':
-                  if (targetBranch := settings.get('targetBranch', '')):
-                    params.put("UpdaterTargetBranch", targetBranch)
+              elif msg_type == 'resetCalibration':
+                reset_calibration()
+              elif msg_type == 'reboot':
+                do_reboot(state)
+              elif msg_type == 'tncAccepted':
+                params.put("HasAcceptedTerms", terms_version)
+                params.put("CompletedTrainingVersion", training_version)
+              elif msg_type == 'changeTargetBranch':
+                if targetBranch := settings.get('targetBranch', ''):
+                  params.put("UpdaterTargetBranch", targetBranch)
+                  check_for_updates()
+              elif msg_type == 'update':
+                if action := settings.get('action', ''):
+                  if action == 'check':
                     check_for_updates()
+                  elif action == 'install':
+                    do_reboot(state)
+                  elif action == 'fetch':
+                    fetch_update()
+
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
@@ -205,15 +219,11 @@ class Streamer:
       is_metric = None
 
       if (cur_time := monotonic()) - self.last_periodic_time >= 0.333: # 3 Hz
-        is_metric = params.get_bool("IsMetric")
-        self.receive_udp_message()
         self.last_periodic_time = cur_time
         self.accept_new_connection()
-        self.receive_tcp_message(
-          is_offroad := params.get_bool("IsOffroad"),
-          state := sm['controlsState'].state
-        )
-        self.send_tcp_message(is_offroad, state, is_metric)
+        self.receive_tcp_message(is_offroad := params.get_bool("IsOffroad"), state := sm['controlsState'].state)
+        self.send_tcp_message(is_offroad, state, is_metric := params.get_bool("IsMetric"))
+        self.receive_udp_message()
 
       self.send_udp_message(is_metric)
       self.rk.keep_time()
@@ -224,8 +234,7 @@ class Streamer:
     self.udp_sock.close()
 
 def main():
-  streamer = Streamer()
-  streamer.streamd_thread()
+  Streamer().streamd_thread()
 
 if __name__ == "__main__":
   main()
