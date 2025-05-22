@@ -2,6 +2,7 @@
 import socket
 import msgpack
 import subprocess
+import psutil
 from time import monotonic
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
@@ -10,18 +11,32 @@ from openpilot.system.version import get_version, get_commit, terms_version, tra
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 
-BUFFER_SIZE = 1024
+BUFFER_SIZE = 32768 # If buffer too small, SSH keys will not be fully received.
+BIND_IP = "0.0.0.0"  # Bind to all network interfaces, allowing connections from any available network.
 UDP_PORT = 5006
 TCP_PORT = 5007
 params = Params()
-dongleID = params.get("DongleId").decode("utf-8")
+DONGLE_ID = params.get("DongleId").decode("utf-8")
 SM_UPDATE_INTERVAL = 33
 
+def get_wlan_ip():
+  interfaces=psutil.net_if_addrs()
+  stats=psutil.net_if_stats()
+  if "wlan0" in interfaces:
+    addr=next((a.address for a in interfaces["wlan0"] if a.family==socket.AF_INET and a.address), None)
+    return addr if addr and stats.get("wlan0",{}).isup else "Not Connected"
+  for iface in interfaces:
+    if iface.startswith("wl") and iface!="wlan1" and stats.get(iface,{}).isup:
+      addr=next((a.address for a in interfaces[iface] if a.family==socket.AF_INET and a.address), None)
+      if addr:
+        return addr
+  return "Not Connected"
+
 def check_for_updates():
-  subprocess.run(["pkill", "-SIGUSR1", "-f", "system.updated.updated"])
+  subprocess.Popen(["pkill", "-SIGUSR1", "-f", "system.updated.updated"])
 
 def fetch_update():
-  subprocess.run(["pkill", "-SIGHUP", "-f", "system.updated.updated"])
+  subprocess.Popen(["pkill", "-SIGHUP", "-f", "system.updated.updated"])
 
 def extract_model_data(data_dict):
   extracted_data = {key: data_dict.get(key) for key in ("position", "acceleration", "frameId")}
@@ -43,28 +58,19 @@ def safe_get(key, is_bool=False):
     return False if is_bool else ''
 
 def safe_put_all(settings_to_put, is_bool=False):
-  try:
-    for param_key, value in settings_to_put.items():
-      if is_bool:
-        params.put_bool(param_key, value)
-      else:
-        params.put(param_key, str(value))
-  except Exception as e:
-    print(f"Error putting parameter: {e}")
-
-def deviceStatus(sm):
-  if sm['peripheralState'].pandaType == log.PandaState.PandaType.unknown:
-    return "error"
-  # TODO: Add initialising if alerts.hasSevere from k_alerts
-  return "ready"
-
-def remainingDataUpload(sm):
-  uploader_state = sm['uploaderState']
-  return f"{uploader_state.immediateQueueSize + uploader_state.rawQueueSize} MB"
+  for param_key, value in settings_to_put.items():
+    try:
+      params.put_bool(param_key, value) if is_bool else params.put(param_key, str(value))
+    except Exception as e:
+      print(f"Error putting {param_key}: {e}")
 
 def reset_calibration():
   params.remove("CalibrationParams")
   params.remove("LiveTorqueParameters")
+  # Parameters below need to be removed for newer op version
+  # params.remove("LiveParameters")
+  # params.remove("LiveParametersV2")
+  # params.remove("LiveDelay")
 
 def do_reboot(state):
   if state == log.ControlsState.OpenpilotState.disabled:
@@ -75,67 +81,61 @@ def update_dict_from_sm(target_dict, sm_subset, key):
 
 class Streamer:
   def __init__(self, sm=None):
-    self.local_ip = "0.0.0.0"  # Bind to all network interfaces, allowing connections from any available network.
-    self.ip = None
+    self.udp_send_ip = None
     self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.tcp_conn = None
-    self.sm = sm if sm \
-      else messaging.SubMaster(['modelV2', 'deviceState', 'peripheralState',\
-      'controlsState', 'uploaderState', 'radarState', 'liveCalibration', 'carParams',\
-      'carControl', 'driverStateV2', 'driverMonitoringState', 'carState', 'longitudinalPlan'])
+    self.sm = sm if sm else messaging.SubMaster([
+      'modelV2', 'controlsState', 'radarState', 'liveCalibration',
+      'driverMonitoringState', 'carState', 'longitudinalPlan',
+    ])
     self.rk = Ratekeeper(20)  # Ratekeeper for 20 Hz loop
     self.last_periodic_time = 0  # Track last periodic task
+    self.last_1hz_task_time = 0
+    self.local_wlan_ip = None
     self.setup_sockets()
 
   def setup_sockets(self):
-    (udp_sock := self.udp_sock).bind(((local_ip := self.local_ip), UDP_PORT))
+    (udp_sock := self.udp_sock).bind((BIND_IP, UDP_PORT))
     udp_sock.setblocking(False)
     (tcp_sock := self.tcp_sock).setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable reuse for TCP socket
-    tcp_sock.bind((local_ip, TCP_PORT))
+    tcp_sock.bind((BIND_IP, TCP_PORT))
     tcp_sock.listen(1)
     tcp_sock.setblocking(False)
 
   def send_udp_message(self, is_metric):
-    if self.ip:
-      (data := extract_model_data((sm := self.sm)['modelV2'].to_dict())).update(sm['carControl'].to_dict())
+    if send_ip := self.udp_send_ip:
+      (data := extract_model_data((sm := self.sm)['modelV2'].to_dict())).update(sm['controlsState'].to_dict())
       if is_metric is not None:
         data["IsMetric"] = is_metric
-      data['dongleID'] = dongleID
-      data.update(sm['deviceState'].to_dict())
-      data.update(sm['driverStateV2'].to_dict())
-      data.update(sm['controlsState'].to_dict())
-      update_dict_from_sm(data, sm['radarState'], "leadOne")
-      update_dict_from_sm(data, sm['radarState'], "leadTwo")
-      update_dict_from_sm(data, sm['driverMonitoringState'], "isActiveMode")
-      update_dict_from_sm(data, sm['driverMonitoringState'], "events")
+      data['dongleID'] = DONGLE_ID
+      update_dict_from_sm(data, (radarState := sm['radarState']), "leadOne")
+      update_dict_from_sm(data, radarState, "leadTwo")
+      update_dict_from_sm(data, (sm['driverMonitoringState']), "isActiveMode")
+      #update_dict_from_sm(data, (sm['driverMonitoringState']), "events")
       update_dict_from_sm(data, sm['liveCalibration'], "height")
-      update_dict_from_sm(data, sm['carParams'], "openpilotLongitudinalControl")
       update_dict_from_sm(data, sm['carState'], "vEgoCluster")
       update_dict_from_sm(data, sm['longitudinalPlan'], "personality")
 
       # Pack and send
       try:
-        self.udp_sock.sendto(msgpack.packb(data), (self.ip, UDP_PORT))
+        self.udp_sock.sendto(msgpack.packb(data), (send_ip, UDP_PORT))
       except (BlockingIOError, OSError):
         pass
       except Exception as e:
         print(f"Unexpected error while sending UDP message: {e}")
 
   def send_tcp_message(self, is_offroad, state, is_metric):
-    if self.tcp_conn:
+    if tcp_conn := self.tcp_conn:
       try:
         sett = {'isOffroad': is_offroad}
-        sett['dongleID'] = dongleID
+        sett['dongleID'] = DONGLE_ID
         sett['gitCommit'] = get_commit()[:7]
         sett['currentVersion'] = get_version()
         sett['osVersion'] = HARDWARE.get_os_version()
         sett["state"] = str(state)
         sett['IsMetric'] = is_metric
-
-        #update_dict_from_sm(sett, (sm := self.sm)['deviceState'], "connectivityStatus")
-        #sett['deviceStatus'] = deviceStatus(sm)
-        #sett['remainingDataUpload'] = remainingDataUpload(sm)
+        sett['localIP'] = self.local_wlan_ip
 
         # Define the keys for each category
         bool_keys = {
@@ -147,12 +147,12 @@ class Streamer:
         string_keys = {
           'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint',
           'UpdaterCurrentReleaseNotes', 'UpdaterTargetBranch', 'UpdaterState', 'UpdateFailedCount',
-          'LastUpdateTime'
+          'LastUpdateTime', 'GithubUsername'
         }
 
         for key in bool_keys | string_keys:
           sett[key] = safe_get(key, key in bool_keys)
-        self.tcp_conn.sendall(msgpack.packb(sett))
+        tcp_conn.sendall(msgpack.packb(sett))
 
       except socket.error:
         self.tcp_conn = None  # Reset connection on error
@@ -167,45 +167,51 @@ class Streamer:
   def receive_udp_message(self):
     try:
       message, addr = self.udp_sock.recvfrom(BUFFER_SIZE)
-      if message and dongleID in msgpack.unpackb(message): # Message only contains dongle ID list
-        self.ip = addr[0]  # Update client IP
+      if message and DONGLE_ID in msgpack.unpackb(message): # Message only contains dongle ID list
+        self.udp_send_ip = addr[0]  # Update client IP
     except Exception:
       pass
 
   def receive_tcp_message(self, is_offroad, state):
-    if self.tcp_conn:
+    if tcp_conn := self.tcp_conn:
       try:
-        if message := self.tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT):
+        if message := tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT):
           try:
             settings = msgpack.unpackb(message)
             # Check if account is valid
-            if dongleID in settings.pop('deviceList', []):
-              if (msg_type := settings.pop('msgType', None)) == 'saveToggles':
-                if is_offroad:
-                  safe_put_all(settings, True)
-              elif msg_type == 'saveConfig':
-                #TODO: Add code to set fingerprint and features
-                safe_put_all(settings)
-              elif msg_type == 'resetCalibration':
-                reset_calibration()
-              elif msg_type == 'reboot':
-                do_reboot(state)
-              elif msg_type == 'tncAccepted':
-                params.put("HasAcceptedTerms", terms_version)
-                params.put("CompletedTrainingVersion", training_version)
-              elif msg_type == 'changeTargetBranch':
-                if targetBranch := settings.get('targetBranch', ''):
-                  params.put("UpdaterTargetBranch", targetBranch)
-                  check_for_updates()
-              elif msg_type == 'update':
-                if action := settings.get('action', ''):
-                  if action == 'check':
+            if DONGLE_ID in settings.pop('deviceList', []):
+              match settings.pop('msgType'):
+                case 'saveToggles':
+                  is_offroad and safe_put_all(settings, True)
+                case 'saveConfig':
+                  #TODO: Add code to set fingerprint and features
+                  safe_put_all(settings)
+                case 'resetCalibration':
+                  reset_calibration()
+                case 'reboot':
+                  do_reboot(state)
+                case 'tncAccepted':
+                  params.put("HasAcceptedTerms", terms_version)
+                  params.put("CompletedTrainingVersion", training_version)
+                case 'changeTargetBranch':
+                  if targetBranch := settings.get('targetBranch'):
+                    params.put("UpdaterTargetBranch", targetBranch)
                     check_for_updates()
-                  elif action == 'install':
-                    do_reboot(state)
-                  elif action == 'fetch':
-                    fetch_update()
-
+                case 'update':
+                  match settings.get('action'):
+                    case 'check':
+                      check_for_updates()
+                    case 'install':
+                      do_reboot(state)
+                    case 'fetch':
+                      fetch_update()
+                case 'ssh':
+                  if username := settings.get('username'):
+                    params.put("GithubUsername", username)
+                    params.put("GithubSshKeys", settings.get('keys'))
+                  else:
+                    params.remove("GithubUsername")
+                    params.remove("GithubSshKeys")
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
@@ -215,10 +221,14 @@ class Streamer:
   def streamd_thread(self):
     while True:
       (sm := self.sm).update(SM_UPDATE_INTERVAL)
-      self.rk.monitor_time()
+      (rk:= self.rk).monitor_time()
       is_metric = None
 
-      if (cur_time := monotonic()) - self.last_periodic_time >= 0.333: # 3 Hz
+      if (cur_time := monotonic()) - self.last_1hz_task_time >= 1: # 1 Hz
+        self.last_1hz_task_time = cur_time
+        self.local_wlan_ip = get_wlan_ip()
+
+      if cur_time - self.last_periodic_time >= 0.333: # 3 Hz
         self.last_periodic_time = cur_time
         self.accept_new_connection()
         self.receive_tcp_message(is_offroad := params.get_bool("IsOffroad"), state := sm['controlsState'].state)
@@ -226,12 +236,7 @@ class Streamer:
         self.receive_udp_message()
 
       self.send_udp_message(is_metric)
-      self.rk.keep_time()
-
-  def close_connections(self):
-    if self.tcp_conn:
-      self.tcp_conn.close()
-    self.udp_sock.close()
+      rk.keep_time()
 
 def main():
   Streamer().streamd_thread()
