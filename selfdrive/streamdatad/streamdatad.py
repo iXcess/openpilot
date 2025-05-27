@@ -76,8 +76,13 @@ def do_reboot(state):
   if state == log.ControlsState.OpenpilotState.disabled:
     params.put_bool("DoReboot", True)
 
-def update_dict_from_sm(target_dict, sm_subset, key):
-  target_dict[key] = str(getattr(sm_subset, key))
+def update_dict_from_sm(target_dict, sm_subset, keys):
+  try:
+    c = sm_subset.to_dict()
+    for k in keys:
+      target_dict[k] = c[k]
+  except Exception:
+    return
 
 class Streamer:
   def __init__(self, sm=None):
@@ -109,21 +114,19 @@ class Streamer:
       if is_metric is not None:
         data["IsMetric"] = is_metric
       data['dongleID'] = DONGLE_ID
-      update_dict_from_sm(data, (radarState := sm['radarState']), "leadOne")
-      update_dict_from_sm(data, radarState, "leadTwo")
-      update_dict_from_sm(data, (sm['driverMonitoringState']), "isActiveMode")
-      #update_dict_from_sm(data, (sm['driverMonitoringState']), "events")
-      update_dict_from_sm(data, sm['liveCalibration'], "height")
-      update_dict_from_sm(data, sm['carState'], "vEgoCluster")
-      update_dict_from_sm(data, sm['longitudinalPlan'], "personality")
+      update_dict_from_sm(data, sm['radarState'], ["leadOne", "leadTwo"])
+      update_dict_from_sm(data, sm['driverMonitoringState'], ["isActiveMode", "events"])
+      update_dict_from_sm(data, sm['liveCalibration'], ["height"])
+      update_dict_from_sm(data, sm['carState'], ["vEgoCluster"])
+      update_dict_from_sm(data, sm['longitudinalPlan'], ["personality"])
 
       # Pack and send
       try:
         self.udp_sock.sendto(msgpack.packb(data), (send_ip, UDP_PORT))
       except (BlockingIOError, OSError):
         pass
-      except Exception as e:
-        print(f"Unexpected error while sending UDP message: {e}")
+      except Exception:
+        pass
 
   def send_tcp_message(self, is_offroad, state, is_metric):
     if tcp_conn := self.tcp_conn:
@@ -150,8 +153,10 @@ class Streamer:
           'LastUpdateTime', 'GithubUsername'
         }
 
-        for key in bool_keys | string_keys:
-          sett[key] = safe_get(key, key in bool_keys)
+        for key in bool_keys:
+          sett[key] = safe_get(key, True)
+        for key in string_keys:
+          sett[key] = safe_get(key, False)
         tcp_conn.sendall(msgpack.packb(sett))
 
       except socket.error:
