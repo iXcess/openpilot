@@ -94,7 +94,7 @@ class Streamer:
       'modelV2', 'controlsState', 'radarState', 'liveCalibration',
       'driverMonitoringState', 'carState', 'longitudinalPlan',
     ])
-    self.rk = Ratekeeper(20)  # Ratekeeper for 20 Hz loop
+    self.rk = Ratekeeper(25)  # Ratekeeper for 25 Hz loop
     self.last_periodic_time = 0  # Track last periodic task
     self.last_1hz_task_time = 0
     self.local_wlan_ip = None
