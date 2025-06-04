@@ -267,6 +267,8 @@ class Streamer:
                         self.connect_to_wifi(ssid, settings.get('password'), cur_time)
                       case 'forget':
                         forget_wifi_network(ssid)
+                case 'formatSD':
+                  safe_put_all({"FormatSDCard": True}, True)
 
           except Exception as e:
             print(f"\nError: {e}\nRaw TCP: {message}")
