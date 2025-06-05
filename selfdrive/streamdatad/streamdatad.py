@@ -16,7 +16,7 @@ BUFFER_SIZE = 65536   # If buffer too small, SSH keys will not be fully received
 BIND_IP = "0.0.0.0"   # Bind to all network interfaces, allowing connections from any available network.
 UDP_PORT = 5006
 TCP_PORT = 5007
-WIFI_CONNECT_TIMEOUT_SECONDS = 15 # Timeout for Wi-Fi connection attempts
+WIFI_CONNECT_TIMEOUT_SECONDS = 20 # Timeout for Wi-Fi connection attempts
 params = Params()
 DONGLE_ID = params.get("DongleId").decode("utf-8")
 SM_UPDATE_INTERVAL = 33
@@ -98,7 +98,7 @@ class Streamer:
     self.setup_sockets()
 
   def connect_to_wifi(self, ssid, password, cur_time):
-    if not ssid:
+    if not (ssid := ssid.strip()):
       return False
     self.wifi_connect_attempt_ssid = ssid
     self.wifi_connect_attempt_start_time = cur_time
