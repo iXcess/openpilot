@@ -181,14 +181,6 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
   }
   center_layout->addWidget(home_widget);
 
-  // add update & alerts widgets
-  update_widget = new UpdateAlert();
-  QObject::connect(update_widget, &UpdateAlert::dismiss, [=]() { center_layout->setCurrentIndex(0); });
-  center_layout->addWidget(update_widget);
-  alerts_widget = new OffroadAlert();
-  QObject::connect(alerts_widget, &OffroadAlert::dismiss, [=]() { center_layout->setCurrentIndex(0); });
-  center_layout->addWidget(alerts_widget);
-
   main_layout->addLayout(center_layout, 1);
 
   // set up refresh timer
@@ -226,23 +218,4 @@ void OffroadHome::hideEvent(QHideEvent *event) {
 void OffroadHome::refresh() {
   version->setText(getBrand() + " " +  QString::fromStdString(params.get("UpdaterCurrentDescription")));
 
-  bool updateAvailable = update_widget->refresh();
-  int alerts = alerts_widget->refresh();
-
-  // pop-up new notification
-  int idx = center_layout->currentIndex();
-  if (!updateAvailable && !alerts) {
-    idx = 0;
-  } else if (updateAvailable && (!update_notif->isVisible() || (!alerts && idx == 2))) {
-    idx = 1;
-  } else if (alerts && (!alert_notif->isVisible() || (!updateAvailable && idx == 1))) {
-    idx = 2;
-  }
-  center_layout->setCurrentIndex(idx);
-
-  update_notif->setVisible(updateAvailable);
-  alert_notif->setVisible(alerts);
-  if (alerts) {
-    alert_notif->setText(QString::number(alerts) + (alerts > 1 ? tr(" ALERTS") : tr(" ALERT")));
-  }
 }

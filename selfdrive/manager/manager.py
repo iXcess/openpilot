@@ -14,13 +14,13 @@ from openpilot.system.hardware import HARDWARE, PC
 from openpilot.selfdrive.manager.helpers import unblock_stdout, write_onroad_params, save_bootlog
 from openpilot.selfdrive.manager.process import ensure_running
 from openpilot.selfdrive.manager.process_config import managed_processes
-from openpilot.selfdrive.athena.registration import register, UNREGISTERED_DONGLE_ID
 from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.system.version import is_dirty, get_commit, get_version, get_origin, get_short_branch, \
                            get_normalized_origin, terms_version, training_version, \
                            is_tested_branch, is_release_branch, get_commit_date
 
 
+UNREGISTERED_DONGLE_ID = "UnregisteredDevice"
 
 def manager_init() -> None:
   save_bootlog()
@@ -72,7 +72,7 @@ def manager_init() -> None:
   params.put_bool("IsReleaseBranch", is_release_branch())
 
   # set dongle id
-  reg_res = register(show_spinner=True)
+  reg_res = "1234567890"
   if reg_res:
     dongle_id = reg_res
   else:

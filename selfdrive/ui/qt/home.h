@@ -13,7 +13,6 @@
 #include "selfdrive/ui/qt/onroad.h"
 #include "selfdrive/ui/qt/sidebar.h"
 #include "selfdrive/ui/qt/widgets/controls.h"
-#include "selfdrive/ui/qt/widgets/offroad_alerts.h"
 #include "selfdrive/ui/ui.h"
 
 class OffroadHome : public QFrame {
@@ -35,8 +34,6 @@ private:
   QTimer* timer;
   ElidedLabel* version;
   QStackedLayout* center_layout;
-  UpdateAlert *update_widget;
-  OffroadAlert* alerts_widget;
   QPushButton* alert_notif;
   QPushButton* update_notif;
 };
