@@ -36,7 +36,7 @@ def fetch_update():
 def extract_model_data(data_dict):
   try:
     return {key: data_dict[key] for key in ("position", "acceleration", "frameId")} | {
-      f"{key[:-1]}{i}": item for key in ("laneLines", "roadEdges")
+      f"{key[:-1]}{i}": item for key in ("laneLines", "roadEdges", "laneLineProbs", "roadEdgeStds")
       for i, item in enumerate(data_dict[key], 1)
     }
   except Exception:
