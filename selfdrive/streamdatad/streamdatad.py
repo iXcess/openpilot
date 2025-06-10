@@ -4,6 +4,7 @@ import msgpack
 import subprocess
 import psutil
 import threading
+import re
 from time import monotonic, sleep
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
@@ -13,14 +14,15 @@ from openpilot.system.version import get_version, get_commit, terms_version, tra
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 
+SM_UPDATE_INTERVAL = 33
 BUFFER_SIZE = 65536   # If buffer too small, SSH keys will not be fully received.
 BIND_IP = "0.0.0.0"   # Bind to all network interfaces, allowing connections from any available network.
 UDP_PORT = 5006
 TCP_PORT = 5007
 WIFI_CONNECT_TIMEOUT_SECONDS = 20 # Timeout for Wi-Fi connection attempts
+NO_NETWORK_REGEX = re.compile(r"no network.*ssid", re.IGNORECASE)
 params = Params()
 DONGLE_ID = params.get("DongleId").decode("utf-8")
-SM_UPDATE_INTERVAL = 33
 
 def forget_wifi_network(ssid):
   if not ssid:
@@ -111,7 +113,7 @@ class Streamer:
     def run_nmcli():
       sleep(5) # Wait 5 seconds for user to get hotspot/Wi-Fi ready
       result = subprocess.run(["sudo", "nmcli"] + cmd, text=True, capture_output=True)
-      if "Error: No network with SSID" in result.stderr:
+      if result.returncode != 0 and NO_NETWORK_REGEX.search(result.stderr):
         cloudlog.warning(f"Wi-Fi SSID {ssid} not found, clearing attempt.")
         self.wifi_connect_attempt_ssid = None
         self.wifi_connect_attempt_start_time = None
