@@ -8,6 +8,7 @@ from time import monotonic, sleep
 from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 from cereal import log
+from openpilot.common.swaglog import cloudlog
 from openpilot.system.version import get_version, get_commit, terms_version, training_version
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
@@ -55,7 +56,7 @@ def safe_put_all(settings_to_put, is_bool=False):
     try:
       (params.put_bool if is_bool else params.put)(param_key, value if is_bool else str(value))
     except Exception as e:
-      print(f"Error putting {param_key}: {e}")
+      cloudlog.error(f"Error putting {param_key}: {e}")
 
 def reset_calibration():
   params.remove("CalibrationParams")
@@ -111,7 +112,7 @@ class Streamer:
       sleep(5) # Wait 5 seconds for user to get hotspot/Wi-Fi ready
       result = subprocess.run(["sudo", "nmcli"] + cmd, text=True, capture_output=True)
       if "Error: No network with SSID" in result.stderr:
-        print(f"Wi-Fi SSID {ssid} not found, clearing attempt.")
+        cloudlog.warning(f"Wi-Fi SSID {ssid} not found, clearing attempt.")
         self.wifi_connect_attempt_ssid = None
         self.wifi_connect_attempt_start_time = None
         return False
@@ -271,7 +272,7 @@ class Streamer:
                   safe_put_all({"FormatSDCard": True}, True)
 
           except Exception as e:
-            print(f"\nError: {e}\nRaw TCP: {message}")
+            cloudlog.error(f"\nError: {e}\nRaw TCP: {message}")
       except Exception:
         pass
 
@@ -288,10 +289,10 @@ class Streamer:
           if ((connected := self.active_wlan_ssid == attempt_ssid) or
             (cur_time - self.wifi_connect_attempt_start_time) >= WIFI_CONNECT_TIMEOUT_SECONDS):
               if not connected:
-                print(f"Timeout reached, forgetting SSID {attempt_ssid}")
+                cloudlog.warning(f"Timeout reached, forgetting SSID {attempt_ssid}")
                 forget_wifi_network(attempt_ssid)
               else:
-                print(f"Wi-Fi {attempt_ssid} connected")
+                cloudlog.info(f"Wi-Fi {attempt_ssid} connected")
               self.wifi_connect_attempt_ssid = None
               self.wifi_connect_attempt_start_time = None
 
