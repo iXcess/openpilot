@@ -223,7 +223,7 @@ class Streamer:
     except Exception:
       pass
 
-  def receive_tcp_message(self, is_offroad, state, cur_time):
+  def receive_tcp_message(self, state, cur_time):
     if tcp_conn := self.tcp_conn:
       try:
         if message := tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT):
@@ -232,8 +232,8 @@ class Streamer:
             # Check if account is valid
             if DONGLE_ID in settings.pop('deviceList', []):
               match settings.pop('msgType'):
-                case 'saveToggles':
-                  is_offroad and safe_put_all(settings, True)
+                case 'saveToggle':
+                  safe_put_all(settings, True)
                 case 'saveConfig':
                   #TODO: Add code to set fingerprint and features
                   safe_put_all(settings)
@@ -301,8 +301,8 @@ class Streamer:
       if cur_time - self.last_periodic_time >= 0.333: # 3 Hz
         self.last_periodic_time = cur_time
         self.accept_new_connection()
-        self.receive_tcp_message(is_offroad := params.get_bool("IsOffroad"), state := sm['controlsState'].state, cur_time)
-        self.send_tcp_message(is_offroad, state, is_metric := params.get_bool("IsMetric"))
+        self.receive_tcp_message(state := sm['controlsState'].state, cur_time)
+        self.send_tcp_message(params.get_bool("IsOffroad"), state, is_metric := params.get_bool("IsMetric"))
         self.receive_udp_message()
 
       self.send_udp_message(is_metric)
