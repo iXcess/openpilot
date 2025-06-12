@@ -36,6 +36,10 @@ def check_for_updates():
 def fetch_update():
   subprocess.Popen(["pkill", "-SIGHUP", "-f", "system.updated.updated"])
 
+def change_branch_and_update(target_branch):
+  params.put("UpdaterTargetBranch", target_branch)
+  check_for_updates()
+
 def extract_model_data(data_dict):
   try:
     return {key: data_dict[key] for key in ("position", "acceleration", "frameId")} | {
@@ -56,7 +60,7 @@ def safe_put_all(settings_to_put, is_bool=False):
   """Stores multiple parameters safely."""
   for param_key, value in settings_to_put.items():
     try:
-      (params.put_bool if is_bool else params.put)(param_key, value if is_bool else str(value))
+      (params.put_bool_nonblocking if is_bool else params.put_nonblocking)(param_key, value if is_bool else str(value))
     except Exception as e:
       cloudlog.error(f"Error putting {param_key}: {e}")
 
@@ -70,7 +74,7 @@ def reset_calibration():
 
 def do_reboot(state):
   if state == log.ControlsState.OpenpilotState.disabled:
-    params.put_bool("DoReboot", True)
+    params.put_bool_nonblocking("DoReboot", True)
 
 def update_dict_from_sm(target_dict, sm_subset, keys):
   try:
@@ -242,12 +246,11 @@ class Streamer:
                 case 'reboot':
                   do_reboot(state)
                 case 'tncAccepted':
-                  params.put("HasAcceptedTerms", terms_version)
-                  params.put("CompletedTrainingVersion", training_version)
+                  params.put_nonblocking("HasAcceptedTerms", terms_version)
+                  params.put_nonblocking("CompletedTrainingVersion", training_version)
                 case 'changeTargetBranch':
                   if targetBranch := settings.get('targetBranch'):
-                    params.put("UpdaterTargetBranch", targetBranch)
-                    check_for_updates()
+                    threading.Thread(target=change_branch_and_update, args=(targetBranch,)).start()
                 case 'update':
                   match settings.get('action'):
                     case 'check':
@@ -258,8 +261,8 @@ class Streamer:
                       fetch_update()
                 case 'ssh':
                   if username := settings.get('username'):
-                    params.put("GithubUsername", username)
-                    params.put("GithubSshKeys", settings.get('keys'))
+                    params.put_nonblocking("GithubUsername", username)
+                    params.put_nonblocking("GithubSshKeys", settings.get('keys'))
                   else:
                     params.remove("GithubUsername")
                     params.remove("GithubSshKeys")
