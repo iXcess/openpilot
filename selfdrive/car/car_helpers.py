@@ -120,11 +120,16 @@ def can_fingerprint(next_can: Callable) -> tuple[str | None, dict[int, dict]]:
 
 # **** for use live only ****
 def fingerprint(logcan, sendcan, num_pandas):
+  params = Params()
   fixed_fingerprint = os.environ.get('FINGERPRINT', "")
+  if not fixed_fingerprint:
+    fixed_fingerprint = params.get("FixFingerprint")
+    fixed_fingerprint = fixed_fingerprint.upper() if fixed_fingerprint is not None else None
+    if fixed_fingerprint:
+     fixed_fingerprint = fixed_fingerprint.decode('ascii')
   skip_fw_query = os.environ.get('SKIP_FW_QUERY', False)
   disable_fw_cache = os.environ.get('DISABLE_FW_CACHE', False)
   ecu_rx_addrs = set()
-  params = Params()
 
   start_time = time.monotonic()
   if not skip_fw_query:
