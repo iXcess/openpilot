@@ -14,6 +14,7 @@ from openpilot.system.version import get_version, get_commit, terms_version, tra
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
+from openpilot.common.features import Features
 
 SM_UPDATE_INTERVAL = 33
 BUFFER_SIZE = 65536   # If buffer too small, SSH keys will not be fully received.
@@ -25,6 +26,7 @@ NO_NETWORK_REGEX = re.compile(r"no network.*ssid", re.IGNORECASE)
 params = Params()
 DONGLE_ID = params.get("DongleId").decode("utf-8")
 SUPPORTED_MODELS = {getattr(car, 'value', car) for car in FINGERPRINTS}
+features = Features()
 
 def forget_wifi_network(ssid):
   if not ssid:
@@ -244,10 +246,12 @@ class Streamer:
                 case 'saveToggle':
                   safe_put_all(settings, True)
                 case 'saveConfig':
-                  #TODO: Add code to set fingerprint and features
+
                   if (fix_fp := settings.pop('FixFingerprint', None)) is not None:
                     if (fix_fp := fix_fp.strip()) == "" or is_supported_model(fix_fp):
                       safe_put_all({'FixFingerprint': fix_fp})
+                  if (features_to_add := settings.pop('FeaturesPackage', None)) is not None:
+                    features.set_features(features_to_add)
 
                   safe_put_all(settings)
                 case 'resetCalibration':

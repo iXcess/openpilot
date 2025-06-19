@@ -7,12 +7,14 @@ from openpilot.selfdrive.car.dnga.values import CAR, DBC, BRAKE_SCALE, SNG_CAR
 from openpilot.common.numpy_fast import clip, interp
 from openpilot.common.realtime import DT_CTRL
 from bisect import bisect_left
+from openpilot.common.features import Features
 
 BRAKE_THRESHOLD = 0.01
 BRAKE_MAG = [BRAKE_THRESHOLD,.32,.46,.61,.76,.90,1.06,1.21,1.35,1.51,4.0]
 PUMP_VALS = [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1.0]
 PUMP_RESET_INTERVAL = 1.5
 PUMP_RESET_DURATION = 0.1
+CLEAR_ENGINE = Features().has("clear-code")
 
 class BrakingStatus():
   STANDSTILL_INIT = 0
@@ -140,7 +142,7 @@ class CarController(CarControllerBase):
     if CS.out.gasPressed:
       apply_brake = 0
 
-    if self.frame < 1000:
+    if self.frame < 1000 or CLEAR_ENGINE:
       can_sends.append(make_can_msg(2015, b'\x01\x04\x00\x00\x00\x00\x00\x00', 0))
 
     # CAN controlled lateral
