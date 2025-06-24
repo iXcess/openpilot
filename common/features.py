@@ -22,7 +22,7 @@ def _process_feature_string(feature_string_input: str) -> str:
 
 def _get_features_param() -> str:
   """Safely retrieves the feature parameter as a string."""
-  return params.get("FeaturesPackage") or ""
+  return params.get("FeaturesPackage").decode() or ""
 
 def _put_features_param(value: str) -> None:
   """Puts the feature parameter value."""
