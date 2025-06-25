@@ -68,13 +68,14 @@ def safe_put_all(settings_to_put, is_bool=False):
     except Exception as e:
       cloudlog.error(f"Error putting {param_key}: {e}")
 
-def reset_calibration():
-  params.remove("CalibrationParams")
-  params.remove("LiveTorqueParameters")
-  # Parameters below need to be removed for newer op version
-  # params.remove("LiveParameters")
-  # params.remove("LiveParametersV2")
-  # params.remove("LiveDelay")
+def reset_calibration(state):
+  if state == log.ControlsState.OpenpilotState.disabled:
+    params.remove("CalibrationParams")
+    params.remove("LiveTorqueParameters")
+    # Parameters below need to be removed for newer op version
+    # params.remove("LiveParameters")
+    # params.remove("LiveParametersV2")
+    # params.remove("LiveDelay")
 
 def do_reboot(state):
   if state == log.ControlsState.OpenpilotState.disabled:
@@ -234,7 +235,7 @@ class Streamer:
     except Exception:
       pass
 
-  def receive_tcp_message(self, state, cur_time):
+  def receive_tcp_message(self, state, cur_time, is_offroad):
     if tcp_conn := self.tcp_conn:
       try:
         if message := tcp_conn.recv(BUFFER_SIZE, socket.MSG_DONTWAIT):
@@ -255,7 +256,7 @@ class Streamer:
 
                   safe_put_all(settings)
                 case 'resetCalibration':
-                  reset_calibration()
+                  reset_calibration(state)
                 case 'reboot':
                   do_reboot(state)
                 case 'tncAccepted':
@@ -287,7 +288,8 @@ class Streamer:
                       case 'forget':
                         forget_wifi_network(ssid)
                 case 'formatSD':
-                  safe_put_all({"FormatSDCard": True}, True)
+                  if is_offroad:
+                    safe_put_all({"FormatSDCard": True}, True)
 
           except Exception as e:
             cloudlog.error(f"\nError: {e}\nRaw TCP: {message}")
@@ -317,8 +319,8 @@ class Streamer:
       if cur_time - self.last_periodic_time >= 0.333: # 3 Hz
         self.last_periodic_time = cur_time
         self.accept_new_connection()
-        self.receive_tcp_message(state := sm['controlsState'].state, cur_time)
-        self.send_tcp_message(params.get_bool("IsOffroad"), state, is_metric := params.get_bool("IsMetric"))
+        self.receive_tcp_message(state := sm['controlsState'].state, cur_time, is_offroad := params.get_bool("IsOffroad"))
+        self.send_tcp_message(is_offroad, state, is_metric := params.get_bool("IsMetric"))
         self.receive_udp_message()
 
       self.send_udp_message(is_metric)
