@@ -206,7 +206,7 @@ class Streamer:
         }
         string_keys = {
           'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint',
-          'UpdaterCurrentReleaseNotes', 'UpdaterTargetBranch', 'UpdaterState', 'UpdateFailedCount',
+          'UpdaterTargetBranch', 'UpdaterState', 'UpdateFailedCount',
           'LastUpdateTime', 'GithubUsername'
         }
 
