@@ -14,7 +14,6 @@ BRAKE_MAG = [BRAKE_THRESHOLD,.32,.46,.61,.76,.90,1.06,1.21,1.35,1.51,4.0]
 PUMP_VALS = [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1.0]
 PUMP_RESET_INTERVAL = 1.5
 PUMP_RESET_DURATION = 0.1
-CLEAR_ENGINE = Features().has("clear-code")
 
 class BrakingStatus():
   STANDSTILL_INIT = 0
@@ -120,6 +119,7 @@ class CarController(CarControllerBase):
 
     self.stockLdw = False
     self.frame = 0
+    self.clear_engine = Features().has("clear-code")
 
   def update(self, CC, CS, now_nanos):
     can_sends = []
@@ -142,7 +142,7 @@ class CarController(CarControllerBase):
     if CS.out.gasPressed:
       apply_brake = 0
 
-    if self.frame < 1000 or CLEAR_ENGINE:
+    if self.frame < 1000 or self.clear_engine:
       can_sends.append(make_can_msg(2015, b'\x01\x04\x00\x00\x00\x00\x00\x00', 0))
 
     # CAN controlled lateral

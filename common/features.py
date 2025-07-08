@@ -1,12 +1,20 @@
 from openpilot.common.params import Params
 
-params = Params()
 FEATURE_DELIMITER = ', '
 
 FEATURES = {
   "ignore-dm",
   "clear-code",
 }
+
+_params_instance: Params | None = None
+
+def _get_params() -> Params:
+  """Lazily returns a shared Params instance."""
+  global _params_instance
+  if _params_instance is None:
+    _params_instance = Params()
+  return _params_instance
 
 def _process_feature_string(feature_string_input: str) -> str:
   """Normalises and validates a feature string, preserving order."""
@@ -22,11 +30,11 @@ def _process_feature_string(feature_string_input: str) -> str:
 
 def _get_features_param() -> str:
   """Safely retrieves the feature parameter as a string."""
-  return params.get("FeaturesPackage").decode() or ""
+  return _get_params().get("FeaturesPackage").decode() or ""
 
 def _put_features_param(value: str) -> None:
   """Puts the feature parameter value."""
-  params.put_nonblocking("FeaturesPackage", value)
+  _get_params().put_nonblocking("FeaturesPackage", value)
 
 class Features:
   def set_features(self, feature_string: str) -> None:
