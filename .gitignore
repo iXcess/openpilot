@@ -87,3 +87,7 @@ build/
 
 poetry.toml
 Pipfile
+
+panda/board/jungle/obj/
+panda/board/obj/
+opendbc/can/parser_pyx.cpp
