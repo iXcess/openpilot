@@ -20,7 +20,7 @@ from openpilot.system.version import is_dirty, get_commit, get_version, get_orig
                            get_normalized_origin, terms_version, training_version, \
                            is_tested_branch, is_release_branch, get_commit_date
 from openpilot.common.features import Features
-
+import openpilot.common.kommu_led as led
 
 def manager_init() -> None:
   save_bootlog()
@@ -137,6 +137,8 @@ def manager_thread() -> None:
   write_onroad_params(False, params)
   ensure_running(managed_processes.values(), False, params=params, CP=sm['carParams'], not_run=ignore)
 
+  led.set(mode="off") # manager starts, turn off LED
+
   started_prev = False
 
   while True:
@@ -148,6 +150,7 @@ def manager_thread() -> None:
       params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
     elif not started and started_prev:
       params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
+      led.set(mode="off") # car is off, turn off LED
 
     # update onroad params, which drives boardd's safety setter thread
     if started != started_prev:

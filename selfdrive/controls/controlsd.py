@@ -33,6 +33,7 @@ from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.version import get_short_branch
+import openpilot.common.kommu_led as led
 
 SOFT_DISABLE_TIME = 3  # seconds
 LDW_MIN_SPEED = 31 * CV.MPH_TO_MS
@@ -72,6 +73,8 @@ class CarD:
 
     self.can_rcv_timeout_counter = 0      # conseuctive timeout count
     self.can_rcv_cum_timeout_counter = 0  # cumulative timeout count
+
+    self.last_alert_type = None  # track previous alert type for LED state
 
     self.params = Params()
 
@@ -832,6 +835,8 @@ class Controls:
     if current_alert:
       hudControl.visualAlert = current_alert.visual_alert
 
+    self.update_led(current_alert.alert_type if current_alert else None) # update LED depending on current alert type
+
     if not self.CP.passive and self.initialized:
       self.last_actuators = self.card.controls_update(CC)
       CC.actuatorsOutput = self.last_actuators
@@ -959,6 +964,18 @@ class Controls:
       e.set()
       t.join()
 
+  def update_led(self, alert_type):
+    if alert_type != getattr(self, "last_alert_type", None):
+      mapping = {
+        "NO_ENTRY": ("RED", "solid", None),
+        "PERMANENT": ("RED", "solid", None),
+        "WARNING": ("ORANGE", "blink", "fast"),
+        "SOFT_DISABLE": ("ORANGE", "blink", "slow"),
+        "ENABLE": ("GREEN", "solid", None)
+      }
+      c, m, r = mapping.get(alert_type, ("WHITE", "solid", None))
+      led.set(led.COLORS[c], mode=m, rate=r)
+      self.last_alert_type = alert_type
 
 def main():
   controls = Controls()
