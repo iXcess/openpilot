@@ -280,6 +280,7 @@ class Streamer:
       if message[0] != CHANNEL_SETTINGS:  # Only handle settings messages
         return
       settings = msgpack.unpackb(message[1:])
+      print(settings)
       # Check if account is valid
       if DONGLE_ID in settings.pop('deviceList', []):
         match settings.pop('msgType'):
@@ -356,7 +357,7 @@ class Streamer:
         self.receive_settings_message(state := sm['controlsState'].state, cur_time, is_offroad := params.get_bool("IsOffroad"))
         self.send_settings_message(is_offroad, state, is_metric := params.get_bool("IsMetric"))
 
-      self.send_visualisation_message(is_metric)
+      #self.send_visualisation_message(is_metric)
       rk.keep_time()
 
 def main():
