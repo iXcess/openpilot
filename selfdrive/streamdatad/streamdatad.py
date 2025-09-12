@@ -5,17 +5,20 @@ import subprocess
 import psutil
 import threading
 import re
+import math
 from time import monotonic
 from bluezero import adapter, peripheral
-from openpilot.common.realtime import Ratekeeper
 import cereal.messaging as messaging
 from cereal import log
+from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.version import get_version, get_commit, terms_version, training_version
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
+
+MESSAGE_HZ = 9 # Expected message rate, must match app value
 
 # BLE advertising name
 BLE_NAME = "KommuBLE"
@@ -36,6 +39,23 @@ params = Params()
 DONGLE_ID = (params.get("DongleId") or b"").decode()
 SUPPORTED_MODELS = {getattr(car, 'value', car) for car in FINGERPRINTS}
 features = Features()
+
+def chunk_and_send(ble, channel: int, payload: bytes):
+  CHUNK_SIZE = 235  # max bytes per BLE chunk
+  # per-channel counters stored on the function object; avoids globals
+  cnts = (chunk_and_send._counters if hasattr(chunk_and_send, "_counters")
+          else setattr(chunk_and_send, "_counters", {}) or chunk_and_send._counters)
+  # get & increment counter, wrap at 65535
+  cnts[channel] = (cnt := cnts.get(channel, 0)) + 1 & 0xFFFF
+  msg_id = cnt.to_bytes(2, "big")  # deterministic 2-byte ID
+  base = bytes([channel]) + msg_id  # prebuild header prefix
+  # total number of segments using ceil division
+  total = -(-len(payload) // CHUNK_SIZE)
+  for seg_idx in range(total):
+    start = seg_idx * CHUNK_SIZE
+    end = start + CHUNK_SIZE
+    # send chunk with header: channel + msg_id + segment index + total segments
+    ble.send(base + bytes([seg_idx, total]) + payload[start:end])
 
 def forget_wifi_network(ssid):
   if not ssid:
@@ -61,6 +81,27 @@ def extract_model_data(data_dict):
     }
   except Exception:
     return {}
+
+# To be removed if no need to send partial data
+'''
+def extract_model_data_compact(d):
+  try:
+    ll, lp, re = d.get("laneLines"), d.get("laneLineProbs"), d.get("roadEdgeStds")
+    out = {
+      "position": d.get("position"),
+      "frameId": d.get("frameId"),
+      "accelerationX": (a := d.get("acceleration")) and a.get("x"),
+      "laneLine1": ll[0] if ll and len(ll) > 0 else None,
+      "laneLine2": ll[1] if ll and len(ll) > 1 else None,
+      "laneLineProb1": lp[0] if lp and len(lp) > 0 else None,
+      "laneLineProb2": lp[1] if lp and len(lp) > 1 else None,
+      "roadEdge1Bool": re and len(re) > 0 and re[0] < 1.0,
+      "roadEdge2Bool": re and len(re) > 1 and re[1] < 1.0,
+    }
+    return out
+  except Exception:
+    return {}
+'''
 
 def safe_get(key, is_bool=False):
   """Safely retrieve a parameter value."""
@@ -97,6 +138,45 @@ def update_dict_from_sm(target_dict, sm_subset, keys):
       target_dict[k] = c[k]
   except KeyError:
     pass
+
+def quantize(o, key_name=None):
+  if isinstance(o, dict):
+    return {k: quantize(v, k) for k, v in o.items()}
+  if isinstance(o, list):
+    return [quantize(v, key_name) for v in o]
+  if isinstance(o, float):
+    if math.isnan(o):
+      return None
+    # keep 3dp if probability or key is vEgoCluster
+    return round(o, 3) if 0 < abs(o) < 1 or key_name == "vEgoCluster" else round(o)
+  return o
+
+# To be removed if no need to send partial data
+'''
+def update_leads(data, radar_state):
+  try:
+    c = radar_state.to_dict()
+    if "leadOne" in c:
+      lead1 = c["leadOne"]
+      data["leadOneDRel"] = lead1.get("dRel")
+      data["leadOneYRel"] = lead1.get("yRel")
+      data["leadOneStatus"] = lead1.get("status")
+    if "leadTwo" in c:
+      lead2 = c["leadTwo"]
+      data["leadTwoDRel"] = lead2.get("dRel")
+      data["leadTwoYRel"] = lead2.get("yRel")
+      data["leadTwoStatus"] = lead2.get("status")
+  except Exception:
+    pass
+
+def update_height(data, live_calib):
+  try:
+    h = live_calib.to_dict().get("height")
+    if h and len(h) > 0:
+      data["height"] = h[0]
+  except Exception:
+    pass
+'''
 
 def is_supported_model(name: str) -> bool:
   return name.upper() in SUPPORTED_MODELS
@@ -166,7 +246,7 @@ class Streamer:
       'modelV2', 'controlsState', 'radarState', 'liveCalibration',
       'driverMonitoringState', 'carState', 'longitudinalPlan',
     ])
-    self.rk = Ratekeeper(25) # Ratekeeper for 25 Hz loop
+    self.rk = Ratekeeper(MESSAGE_HZ) # Ratekeeper for loop
     self.last_periodic_time = 0 # Track last periodic task
     self.last_1hz_task_time = 0
     self.local_wlan_ip = None
@@ -225,6 +305,15 @@ class Streamer:
 
   def send_visualisation_message(self, is_metric):
     (data := extract_model_data((sm := self.sm)['modelV2'].to_dict())).update(sm['controlsState'].to_dict())
+
+    # To be removed if no need to send partial data
+    '''
+    sm = self.sm
+    (data := extract_model_data_compact(sm['modelV2'].to_dict()))
+    update_leads(data, sm['radarState'])
+    update_height(data, sm['liveCalibration'])
+    '''
+
     data["IsMetric"] = is_metric
     data['dongleID'] = DONGLE_ID
     update_dict_from_sm(data, sm['radarState'], ["leadOne", "leadTwo"])
@@ -232,10 +321,10 @@ class Streamer:
     update_dict_from_sm(data, sm['liveCalibration'], ["height"])
     update_dict_from_sm(data, sm['carState'], ["vEgoCluster"])
     update_dict_from_sm(data, sm['longitudinalPlan'], ["personality"])
+    data = quantize(data)
     try:
       payload = msgpack.packb(data)
-      self.ble.send(bytes([CHANNEL_VISUALISATION]) + payload)  # prepend channel ID
-
+      chunk_and_send(self.ble, CHANNEL_VISUALISATION, payload)
     except Exception as e:
       cloudlog.error(f"BLE visualisation sending error: {e}")
 
@@ -268,7 +357,7 @@ class Streamer:
       sett[key] = safe_get(key, False)
     try:
       payload = msgpack.packb(sett)
-      self.ble.send(bytes([CHANNEL_SETTINGS]) + payload)
+      chunk_and_send(self.ble, CHANNEL_SETTINGS, payload)
     except Exception as e:
       cloudlog.error(f"BLE settings sending error: {e}")
 
@@ -280,7 +369,6 @@ class Streamer:
       if message[0] != CHANNEL_SETTINGS:  # Only handle settings messages
         return
       settings = msgpack.unpackb(message[1:])
-      print(settings)
       # Check if account is valid
       if DONGLE_ID in settings.pop('deviceList', []):
         match settings.pop('msgType'):
@@ -357,7 +445,7 @@ class Streamer:
         self.receive_settings_message(state := sm['controlsState'].state, cur_time, is_offroad := params.get_bool("IsOffroad"))
         self.send_settings_message(is_offroad, state, is_metric := params.get_bool("IsMetric"))
 
-      #self.send_visualisation_message(is_metric)
+      self.send_visualisation_message(is_metric)
       rk.keep_time()
 
 def main():
