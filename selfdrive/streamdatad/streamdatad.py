@@ -40,22 +40,14 @@ DONGLE_ID = (params.get("DongleId") or b"").decode()
 SUPPORTED_MODELS = {getattr(car, 'value', car) for car in FINGERPRINTS}
 features = Features()
 
-def chunk_and_send(ble, channel: int, payload: bytes):
-  CHUNK_SIZE = 235  # max bytes per BLE chunk
-  # per-channel counters stored on the function object; avoids globals
-  cnts = (chunk_and_send._counters if hasattr(chunk_and_send, "_counters")
-          else setattr(chunk_and_send, "_counters", {}) or chunk_and_send._counters)
-  # get & increment counter, wrap at 65535
-  cnts[channel] = (cnt := cnts.get(channel, 0)) + 1 & 0xFFFF
-  msg_id = cnt.to_bytes(2, "big")  # deterministic 2-byte ID
-  base = bytes([channel]) + msg_id  # prebuild header prefix
-  # total number of segments using ceil division
-  total = -(-len(payload) // CHUNK_SIZE)
-  for seg_idx in range(total):
-    start = seg_idx * CHUNK_SIZE
-    end = start + CHUNK_SIZE
-    # send chunk with header: channel + msg_id + segment index + total segments
-    ble.send(base + bytes([seg_idx, total]) + payload[start:end])
+def chunk_and_send(ble, channel: int, payload: bytes, CHUNK_SIZE=240):
+  cnts = chunk_and_send.__dict__.setdefault("_counters", {})
+  # get & increment counter, cycle 1–255 for msg_id
+  cnts[channel] = msg_id = cnts.get(channel, 0) % 255 + 1
+  view = memoryview(payload)
+  for seg_idx in range(total_segments := -(-len(payload) // CHUNK_SIZE)):
+    offset = seg_idx * CHUNK_SIZE
+    ble.send(bytes([channel, msg_id, total_segments, seg_idx]) + view[offset : offset + CHUNK_SIZE])
 
 def forget_wifi_network(ssid):
   if not ssid:
