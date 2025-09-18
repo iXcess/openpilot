@@ -40,6 +40,11 @@ DONGLE_ID = (params.get("DongleId") or b"").decode()
 SUPPORTED_MODELS = {getattr(car, 'value', car) for car in FINGERPRINTS}
 features = Features()
 
+# Call functions with cached values only once
+GIT_COMMIT = get_commit()[:7]
+CUR_VERSION = get_version()
+OS_VERSION = HARDWARE.get_os_version()
+
 def chunk_and_send(ble, channel: int, payload: bytes, CHUNK_SIZE=240):
   cnts = chunk_and_send.__dict__.setdefault("_counters", {})
   # get & increment counter, cycle 1–255 for msg_id
@@ -268,9 +273,9 @@ class Streamer:
   def send_settings_message(self, is_offroad, state, is_metric):
     sett = {'isOffroad': is_offroad}
     sett['dongleID'] = DONGLE_ID
-    sett['gitCommit'] = get_commit()[:7]
-    sett['currentVersion'] = get_version()
-    sett['osVersion'] = HARDWARE.get_os_version()
+    sett['gitCommit'] = GIT_COMMIT
+    sett['currentVersion'] = CUR_VERSION
+    sett['osVersion'] = OS_VERSION
     sett["state"] = str(state)
     sett['IsMetric'] = is_metric
     sett['localIP'] = self.local_wlan_ip
