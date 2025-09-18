@@ -18,7 +18,7 @@ from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
 
-MESSAGE_HZ = 9 # Expected message rate, must match app value
+MESSAGE_HZ = 10 # Expected message rate, must match app value
 
 # BLE advertising name
 BLE_NAME = "KommuBLE"
@@ -67,33 +67,14 @@ def change_branch_and_update(target_branch):
 
 def extract_model_data(data_dict):
   try:
-    return {key: data_dict[key] for key in ("position", "acceleration", "frameId")} | {
-      f"{key[:-1]}{i}": item for key in ("laneLines", "roadEdges", "laneLineProbs", "roadEdgeStds")
-      for i, item in enumerate(data_dict[key], 1)
-    }
+    data = {key: data_dict[key] for key in ("position", "frameId")}
+    data["accelerationX"] = data_dict.get("acceleration", {}).get("x")
+    for key in ("laneLines", "roadEdges", "laneLineProbs", "roadEdgeStds"):
+      for i, item in enumerate(data_dict[key], 1):
+        data[f"{key[:-1]}{i}"] = item
+    return data
   except Exception:
     return {}
-
-# To be removed if no need to send partial data
-'''
-def extract_model_data_compact(d):
-  try:
-    ll, lp, re = d.get("laneLines"), d.get("laneLineProbs"), d.get("roadEdgeStds")
-    out = {
-      "position": d.get("position"),
-      "frameId": d.get("frameId"),
-      "accelerationX": (a := d.get("acceleration")) and a.get("x"),
-      "laneLine1": ll[0] if ll and len(ll) > 0 else None,
-      "laneLine2": ll[1] if ll and len(ll) > 1 else None,
-      "laneLineProb1": lp[0] if lp and len(lp) > 0 else None,
-      "laneLineProb2": lp[1] if lp and len(lp) > 1 else None,
-      "roadEdge1Bool": re and len(re) > 0 and re[0] < 1.0,
-      "roadEdge2Bool": re and len(re) > 1 and re[1] < 1.0,
-    }
-    return out
-  except Exception:
-    return {}
-'''
 
 def safe_get(key, is_bool=False):
   """Safely retrieve a parameter value."""
@@ -142,33 +123,6 @@ def quantize(o, key_name=None):
     # keep 3dp if probability or key is vEgoCluster
     return round(o, 3) if 0 < abs(o) < 1 or key_name == "vEgoCluster" else round(o)
   return o
-
-# To be removed if no need to send partial data
-'''
-def update_leads(data, radar_state):
-  try:
-    c = radar_state.to_dict()
-    if "leadOne" in c:
-      lead1 = c["leadOne"]
-      data["leadOneDRel"] = lead1.get("dRel")
-      data["leadOneYRel"] = lead1.get("yRel")
-      data["leadOneStatus"] = lead1.get("status")
-    if "leadTwo" in c:
-      lead2 = c["leadTwo"]
-      data["leadTwoDRel"] = lead2.get("dRel")
-      data["leadTwoYRel"] = lead2.get("yRel")
-      data["leadTwoStatus"] = lead2.get("status")
-  except Exception:
-    pass
-
-def update_height(data, live_calib):
-  try:
-    h = live_calib.to_dict().get("height")
-    if h and len(h) > 0:
-      data["height"] = h[0]
-  except Exception:
-    pass
-'''
 
 def is_supported_model(name: str) -> bool:
   return name.upper() in SUPPORTED_MODELS
@@ -297,20 +251,11 @@ class Streamer:
 
   def send_visualisation_message(self, is_metric):
     (data := extract_model_data((sm := self.sm)['modelV2'].to_dict())).update(sm['controlsState'].to_dict())
-
-    # To be removed if no need to send partial data
-    '''
-    sm = self.sm
-    (data := extract_model_data_compact(sm['modelV2'].to_dict()))
-    update_leads(data, sm['radarState'])
-    update_height(data, sm['liveCalibration'])
-    '''
-
     data["IsMetric"] = is_metric
     data['dongleID'] = DONGLE_ID
     update_dict_from_sm(data, sm['radarState'], ["leadOne", "leadTwo"])
     update_dict_from_sm(data, sm['driverMonitoringState'], ["isActiveMode", "events"])
-    update_dict_from_sm(data, sm['liveCalibration'], ["height"])
+    data["heightVal"] = sm['liveCalibration'].to_dict().get("height", [None])[0]
     update_dict_from_sm(data, sm['carState'], ["vEgoCluster"])
     update_dict_from_sm(data, sm['longitudinalPlan'], ["personality"])
     data = quantize(data)
