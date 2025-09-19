@@ -18,7 +18,7 @@ from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
 
-MESSAGE_HZ = 10 # Expected message rate, must match app visualisation value
+MESSAGE_HZ = 8 # Expected message rate, must match app visualisation value
 
 # Channel IDs
 CHANNEL_VISUALISATION = 0x01
