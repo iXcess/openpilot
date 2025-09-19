@@ -18,10 +18,7 @@ from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
 
-MESSAGE_HZ = 10 # Expected message rate, must match app value
-
-# BLE advertising name
-BLE_NAME = "KommuBLE"
+MESSAGE_HZ = 10 # Expected message rate, must match app visualisation value
 
 # Channel IDs
 CHANNEL_VISUALISATION = 0x01
@@ -37,6 +34,7 @@ WIFI_CONNECT_TIMEOUT_SECONDS = 20 # Timeout for device Wi-Fi connection attempts
 NO_NETWORK_REGEX = re.compile(r"no network.*ssid", re.IGNORECASE)
 params = Params()
 DONGLE_ID = (params.get("DongleId") or b"").decode()
+BLE_NAME = f"KommuAssist_{DONGLE_ID}" # BLE advertising name
 SUPPORTED_MODELS = {getattr(car, 'value', car) for car in FINGERPRINTS}
 features = Features()
 
@@ -136,7 +134,8 @@ class BLEBridge:
   """Threaded BLE Nordic UART bridge with RX and TX."""
   def __init__(self):
     self.ad = list(adapter.Adapter.available())[0]
-    self.dev = peripheral.Peripheral(self.ad.address, local_name=BLE_NAME, appearance=1344)
+    self.dev = peripheral.Peripheral(self.ad.address, local_name=BLE_NAME, appearance=963)
+    print(f"Advertising BLE as {BLE_NAME}")
 
     self.rx_queue = []
     self.tx_char = None
