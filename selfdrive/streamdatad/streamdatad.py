@@ -55,16 +55,18 @@ def change_branch_and_update(target_branch):
   params.put("UpdaterTargetBranch", target_branch)
   check_for_updates()
 
-def extract_model_data(data_dict):
-  try:
-    data = {key: data_dict[key] for key in ("position", "frameId")}
-    data["accelerationX"] = data_dict.get("acceleration", {}).get("x")
-    for key in ("laneLines", "roadEdges", "laneLineProbs", "roadEdgeStds"):
-      for i, item in enumerate(data_dict[key], 1):
-        data[f"{key[:-1]}{i}"] = item
-    return data
-  except Exception:
-    return {}
+def keep_xyz(d):
+  return {'x': d['x'], 'y': d['y'], 'z': d['z']}
+
+def extract_model_data(d):
+  data = {'frameId': d['frameId']}
+  if pos := d.get('position'):
+    data['position'] = keep_xyz(pos)
+  data['accelerationX'] = d.get('acceleration', {}).get('x')
+  for k, xyz in (('laneLine', True), ('roadEdge', True), ('laneLineProb', False), ('roadEdgeStd', False)):
+    for i, item in enumerate(d.get(f"{k}s", []), 1):
+      data[f"{k}{i}"] = keep_xyz(item) if xyz else item
+  return data
 
 def safe_get(key, is_bool=False):
   """Safely retrieve a parameter value."""
@@ -104,6 +106,9 @@ def update_dict_from_sm(target_dict, sm_subset, keys):
       target_dict[k] = c[k]
   except KeyError:
     pass
+
+def extract_lead(r, k):
+  return {f: r[k][f] for f in ("status", "dRel", "yRel")} if k in r else {}
 
 def quantize(o, key_name=None):
   if isinstance(o, dict):
@@ -189,11 +194,15 @@ class Streamer:
     threading.Thread(target=get_wlan_info, daemon=True).start()
 
   def send_visualisation_message(self, is_metric):
-    (data := extract_model_data((sm := self.sm)['modelV2'].to_dict())).update(sm['controlsState'].to_dict())
+    (data := extract_model_data((sm := self.sm)['modelV2'].to_dict()))
     data["IsMetric"] = is_metric
     data['dongleID'] = DONGLE_ID
-    update_dict_from_sm(data, sm['radarState'], ["leadOne", "leadTwo"])
-    update_dict_from_sm(data, sm['driverMonitoringState'], ["isActiveMode", "events"])
+    update_dict_from_sm(data, sm['controlsState'], ["enabled", "state", "experimentalMode", "vCruiseCluster",
+                                                    "alertText1", "alertText2", "alertStatus", "alertSize"])
+    radar = sm['radarState'].to_dict()
+    data["leadOne"] = extract_lead(radar, "leadOne")
+    data["leadTwo"] = extract_lead(radar, "leadTwo")
+    update_dict_from_sm(data, sm['driverMonitoringState'], ["isActiveMode"])
     data["heightVal"] = sm['liveCalibration'].to_dict().get("height", [None])[0]
     update_dict_from_sm(data, sm['carState'], ["vEgoCluster"])
     update_dict_from_sm(data, sm['longitudinalPlan'], ["personality"])
