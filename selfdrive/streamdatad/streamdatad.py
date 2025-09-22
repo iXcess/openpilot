@@ -215,6 +215,10 @@ class Streamer:
     sett['activeWlanSSID'] = \
       f"Connecting to\n{attempt_ssid}" if (attempt_ssid := self.wifi_connect_attempt_ssid) else self.active_wlan_ssid
 
+    if hasattr(self, "supportTunnelOutput"):
+      sett["supportTunnelOutput"] = self.supportTunnelOutput
+      del self.supportTunnelOutput # remove temporary attribute from self
+
     bool_keys = {
       'OpenpilotEnabledToggle', 'QuietMode', 'IsAlcEnabled', 'IsLdwEnabled',
       'SshEnabled', 'ExperimentalMode', 'RecordFront', 'UpdateAvailable',
@@ -234,6 +238,12 @@ class Streamer:
       self.ble.chunk_and_send(CHANNEL_SETTINGS, msgpack.packb(sett))
     except Exception as e:
       cloudlog.error(f"BLE settings sending error: {e}")
+
+  def run_remote_support(self):
+    threading.Thread(target=lambda: setattr(
+      self, "supportTunnelOutput",
+      subprocess.run(["/usr/kommu/support_tunnel.py"], capture_output=True, text=True).stdout.strip()
+    ), daemon=True).start()
 
   def apply_settings_message(self, message, state, cur_time, is_offroad):
     """Apply a valid assembled settings message immediately."""
@@ -289,6 +299,8 @@ class Streamer:
           case 'formatSD':
             if is_offroad:
               safe_put_all({"FormatSDCard": True}, True)
+          case 'remoteSupport':
+            self.run_remote_support()
     except Exception as e:
       cloudlog.error(f"BLE settings receiving error: {e}")
 
