@@ -18,7 +18,7 @@ from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
 from ble_helper import BLEBridge, ChunkReceiver
 
-MESSAGE_HZ = 8  # Expected message rate, must match app visualisation value
+MESSAGE_HZ = 10 # Expected message rate, must match app visualisation value
 params = Params()
 features = Features()
 DONGLE_ID = (params.get("DongleId") or b"").decode()
@@ -59,10 +59,10 @@ def keep_xyz(d):
   return {'x': d['x'], 'y': d['y'], 'z': d['z']}
 
 def extract_model_data(d):
-  data = {'frameId': d['frameId']}
+  data = {'fi': d['frameId']}
   if pos := d.get('position'):
-    data['position'] = keep_xyz(pos)
-  data['accelerationX'] = d.get('acceleration', {}).get('x')
+    data['po'] = keep_xyz(pos)
+  data['ax'] = d.get('acceleration', {}).get('x')
   for k, xyz in (('laneLine', True), ('roadEdge', True), ('laneLineProb', False), ('roadEdgeStd', False)):
     for i, item in enumerate(d.get(f"{k}s", []), 1):
       data[f"{k}{i}"] = keep_xyz(item) if xyz else item
@@ -192,15 +192,15 @@ class Streamer:
 
   def send_visualisation_message(self, is_metric):
     (data := extract_model_data((sm := self.sm)['modelV2'].to_dict()))
-    data["IsMetric"] = is_metric
-    data['dongleID'] = DONGLE_ID
+    data["im"] = is_metric
+    data['di'] = DONGLE_ID
     update_dict_from_sm(data, sm['controlsState'], ["enabled", "state", "experimentalMode", "vCruiseCluster",
                                                     "alertText1", "alertText2", "alertStatus", "alertSize"])
-    radar = sm['radarState'].to_dict()
-    data["leadOne"] = extract_lead(radar, "leadOne")
-    data["leadTwo"] = extract_lead(radar, "leadTwo")
+    rd = sm['radarState'].to_dict()
+    data["lo"] = extract_lead(rd, "leadOne")
+    data["lt"] = extract_lead(rd, "leadTwo")
     update_dict_from_sm(data, sm['driverMonitoringState'], ["isActiveMode"])
-    data["heightVal"] = sm['liveCalibration'].to_dict().get("height", [None])[0]
+    data["ht"] = sm['liveCalibration'].to_dict().get("height", [None])[0]
     update_dict_from_sm(data, sm['carState'], ["vEgoCluster"])
     update_dict_from_sm(data, sm['longitudinalPlan'], ["personality"])
     data = quantize(data)
