@@ -110,16 +110,13 @@ def update_dict_from_sm(target_dict, sm_subset, keys):
 def extract_lead(r, k):
   return {f: r[k][f] for f in ("status", "dRel", "yRel")} if k in r else {}
 
-def quantize(o, key_name=None):
+def quantize(o):
   if isinstance(o, dict):
-    return {k: quantize(v, k) for k, v in o.items()}
+    return {k: quantize(v) for k, v in o.items()}
   if isinstance(o, list):
-    return [quantize(v, key_name) for v in o]
+    return [quantize(v) for v in o]
   if isinstance(o, float):
-    if math.isnan(o):
-      return None
-    # Keep 3dp if probability or key is vEgoCluster
-    return round(o, 3) if 0 < abs(o) < 1 or key_name == "vEgoCluster" else round(o)
+    return None if math.isnan(o) else round(o, 3)
   return o
 
 def is_supported_model(name: str) -> bool:
