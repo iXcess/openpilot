@@ -18,7 +18,7 @@ from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
 from ble_helper import BLEBridge, ChunkReceiver
 
-MESSAGE_HZ = 14 # Expected message rate, must match app visualisation value
+MESSAGE_HZ = 16 # Expected message rate, must match app visualisation value
 params = Params()
 features = Features()
 DONGLE_ID = (params.get("DongleId") or b"").decode()
@@ -55,10 +55,11 @@ def change_branch_and_update(target_branch):
   params.put("UpdaterTargetBranch", target_branch)
   check_for_updates()
 
-def resample(data):
+def resample(data, target=None):
   """Resamples data by a fraction of its original length."""
-  target_length = 12 # original op list length 33, target 4 to 33 for upsampling in app
-  if (t := type(data)) is list and (n := len(data)) > 1 and (m := target_length) > 1:
+  # original op list length 33, target 4 to 33 for upsampling in app
+  m = target or 8
+  if (t := type(data)) is list and (n := len(data)) > 1 and m > 1:
     return [data[0]] + [data[int(i*(n-1)/m)] for i in range(1, m)]
   if t is dict and all(k in data for k in 'xyz'):
     return {k: resample(data[k]) for k in 'xyz'}
@@ -68,7 +69,7 @@ def extract_model_data(d):
   data = {'f': d['frameId']}
   if pos := d.get('position'):
     data['p'] = resample(pos)
-  data['a'] = resample(d.get('acceleration', {}).get('x'))
+  data['a'] = resample(d.get('acceleration', {}).get('x'), 12)
   for k, p, v in (
     ('laneLine', 'l', 1),
     ('roadEdge', 'r', 1),
