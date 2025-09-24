@@ -18,11 +18,11 @@ from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
 from ble_helper import BLEBridge, ChunkReceiver
 
-MESSAGE_HZ = 10 # Expected message rate, must match app visualisation value
+MESSAGE_HZ = 14 # Expected message rate, must match app visualisation value
 params = Params()
 features = Features()
 DONGLE_ID = (params.get("DongleId") or b"").decode()
-BLE_NAME = f"KommuAssist_{DONGLE_ID}"  # BLE advertising name
+BLE_NAME = f"kommu-{DONGLE_ID}"  # BLE advertising name
 
 # Channel IDs
 CHANNEL_VISUALISATION = 0x01
@@ -55,17 +55,27 @@ def change_branch_and_update(target_branch):
   params.put("UpdaterTargetBranch", target_branch)
   check_for_updates()
 
-def keep_xyz(d):
-  return {'x': d['x'], 'y': d['y'], 'z': d['z']}
+def resample(data):
+  """Resamples data by a fraction of its original length."""
+  target_length = 12 # original op list length 33, target 4 to 33 for upsampling in app
+  if (t := type(data)) is list and (n := len(data)) > 1 and (m := target_length) > 1:
+    return [data[0]] + [data[int(i*(n-1)/m)] for i in range(1, m)]
+  if t is dict and all(k in data for k in 'xyz'):
+    return {k: resample(data[k]) for k in 'xyz'}
+  return data
 
 def extract_model_data(d):
-  data = {'fi': d['frameId']}
-  if pos := d.get('position'):
-    data['po'] = keep_xyz(pos)
-  data['ax'] = d.get('acceleration', {}).get('x')
-  for k, xyz in (('laneLine', True), ('roadEdge', True), ('laneLineProb', False), ('roadEdgeStd', False)):
+  data = {'f': d['frameId']}
+  if pos := d.get('position'): data['p'] = resample(pos)
+  data['a'] = resample(d.get('acceleration', {}).get('x'))
+  for k, p, v in (
+    ('laneLine', 'l', 1),
+    ('roadEdge', 'r', 1),
+    ('laneLineProb', 'p', 0),
+    ('roadEdgeStd', 's', 0)
+  ):
     for i, item in enumerate(d.get(f"{k}s", []), 1):
-      data[f"{k}{i}"] = keep_xyz(item) if xyz else item
+      data[f"{p}{i}"] = resample(item) if v else item
   return data
 
 def safe_get(key, is_bool=False):
@@ -108,7 +118,7 @@ def update_dict_from_sm(target_dict, sm_subset, keys):
     pass
 
 def extract_lead(r, k):
-  return {f: r[k][f] for f in ("status", "dRel", "yRel")} if k in r else {}
+  return {'s': r[k]['status'], 'd': r[k]['dRel'], 'y': r[k]['yRel']} if k in r else {}
 
 def quantize(o):
   if isinstance(o, dict):
@@ -192,15 +202,15 @@ class Streamer:
 
   def send_visualisation_message(self, is_metric):
     (data := extract_model_data((sm := self.sm)['modelV2'].to_dict()))
-    data["im"] = is_metric
-    data['di'] = DONGLE_ID
+    data["m"] = is_metric
+    data['d'] = DONGLE_ID
     update_dict_from_sm(data, sm['controlsState'], ["enabled", "state", "experimentalMode", "vCruiseCluster",
                                                     "alertText1", "alertText2", "alertStatus", "alertSize"])
     rd = sm['radarState'].to_dict()
-    data["lo"] = extract_lead(rd, "leadOne")
-    data["lt"] = extract_lead(rd, "leadTwo")
+    data["o"] = extract_lead(rd, "leadOne")
+    data["t"] = extract_lead(rd, "leadTwo")
     update_dict_from_sm(data, sm['driverMonitoringState'], ["isActiveMode"])
-    data["ht"] = sm['liveCalibration'].to_dict().get("height", [None])[0]
+    data["h"] = sm['liveCalibration'].to_dict().get("height", [None])[0]
     update_dict_from_sm(data, sm['carState'], ["vEgoCluster"])
     update_dict_from_sm(data, sm['longitudinalPlan'], ["personality"])
     data = quantize(data)
@@ -327,7 +337,8 @@ class Streamer:
         self.last_periodic_time = cur_time
         state = sm['controlsState'].state
         is_offroad = params.get_bool("IsOffroad") if is_offroad is None else is_offroad
-        self.send_settings_message(is_offroad, state, is_metric := params.get_bool("IsMetric"))
+        is_metric = params.get_bool("IsMetric")
+        self.send_settings_message(is_offroad, state, is_metric)
 
       # 1 Hz WiFi tasks
       if cur_time - self.last_1hz_task_time >= 1:
