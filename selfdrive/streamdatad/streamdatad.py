@@ -66,7 +66,8 @@ def resample(data):
 
 def extract_model_data(d):
   data = {'f': d['frameId']}
-  if pos := d.get('position'): data['p'] = resample(pos)
+  if pos := d.get('position'):
+    data['p'] = resample(pos)
   data['a'] = resample(d.get('acceleration', {}).get('x'))
   for k, p, v in (
     ('laneLine', 'l', 1),
@@ -148,9 +149,9 @@ class Streamer:
     self.current_wifi_iface_name = None
     self.wifi_connect_attempt_ssid = None
     self.wifi_connect_attempt_start_time = None
-
     threading.Thread(target=self.ble.start, daemon=True).start() # Start BLE peripheral
     self.receiver = ChunkReceiver(self.ble) # Handle incoming messages in separate thread
+    self.send_channel = None # Keep track of which channel to send messages
 
   def connect_to_wifi(self, ssid, password, cur_time):
     if not (ssid := ssid.strip()):
@@ -264,61 +265,73 @@ class Streamer:
   def apply_settings_message(self, message, state, cur_time, is_offroad):
     """Apply a valid assembled settings message immediately."""
     try:
-      channel, payload = message
-      if channel != CHANNEL_SETTINGS:
+      c, settings = message
+      if c != CHANNEL_SETTINGS:
         return
-      settings = msgpack.unpackb(payload)
-      # Check if account is valid
-      if DONGLE_ID in settings.pop('deviceList', []):
-        match settings.pop('msgType'):
-          case 'saveToggle':
-            safe_put_all(settings, True)
-          case 'saveConfig':
-            if (fix_fp := settings.get('FixFingerprint', None)) is not None:
-              if (fix_fp := fix_fp.strip()) == "" or is_supported_model(fix_fp):
-                safe_put_all({'FixFingerprint': fix_fp})
-            if (features_to_add := settings.get('FeaturesPackage', None)) is not None:
-              features.set_features(features_to_add)
-            safe_put_all(settings)
-          case 'resetCalibration':
-            reset_calibration(state)
-          case 'reboot':
-            do_reboot(state)
-          case 'tncAccepted':
-            params.put_nonblocking("HasAcceptedTerms", terms_version)
-            params.put_nonblocking("CompletedTrainingVersion", training_version)
-          case 'changeTargetBranch':
-            if targetBranch := settings.get('targetBranch'):
-              threading.Thread(target=change_branch_and_update, args=(targetBranch,)).start()
-          case 'update':
+      match settings.pop('msgType'):
+        case 'saveToggle':
+          safe_put_all(settings, True)
+        case 'saveConfig':
+          if fix_fp := settings.get('FixFingerprint'):
+            if (fix_fp := fix_fp.strip()) == "" or is_supported_model(fix_fp):
+              safe_put_all({'FixFingerprint': fix_fp})
+          if features_to_add := settings.get('FeaturesPackage'):
+            features.set_features(features_to_add)
+          safe_put_all(settings)
+        case 'resetCalibration':
+          reset_calibration(state)
+        case 'reboot':
+          do_reboot(state)
+        case 'tncAccepted':
+          params.put_nonblocking("HasAcceptedTerms", terms_version)
+          params.put_nonblocking("CompletedTrainingVersion", training_version)
+        case 'changeTargetBranch':
+          if targetBranch := settings.get('targetBranch'):
+            threading.Thread(target=change_branch_and_update, args=(targetBranch,)).start()
+        case 'update':
+          match settings.get('action'):
+            case 'check':
+              check_for_updates()
+            case 'install':
+              do_reboot(state)
+            case 'fetch':
+              fetch_update()
+        case 'ssh':
+          if username := settings.get('username'):
+            params.put_nonblocking("GithubUsername", username)
+            params.put_nonblocking("GithubSshKeys", settings.get('keys'))
+          else:
+            params.remove("GithubUsername")
+            params.remove("GithubSshKeys")
+        case 'wifi':
+          if (ssid := settings.get('ssid')):
             match settings.get('action'):
-              case 'check':
-                check_for_updates()
-              case 'install':
-                do_reboot(state)
-              case 'fetch':
-                fetch_update()
-          case 'ssh':
-            if username := settings.get('username'):
-              params.put_nonblocking("GithubUsername", username)
-              params.put_nonblocking("GithubSshKeys", settings.get('keys'))
-            else:
-              params.remove("GithubUsername")
-              params.remove("GithubSshKeys")
-          case 'wifi':
-            if (ssid := settings.get('ssid')):
-              match settings.get('action'):
-                case 'connect':
-                  self.connect_to_wifi(ssid, settings.get('password'), cur_time)
-                case 'forget':
-                  forget_wifi_network(ssid)
-          case 'formatSD':
-            if is_offroad:
-              safe_put_all({"FormatSDCard": True}, True)
-          case 'remoteSupport':
-            self.run_remote_support()
+              case 'connect':
+                self.connect_to_wifi(ssid, settings.get('password'), cur_time)
+              case 'forget':
+                forget_wifi_network(ssid)
+        case 'formatSD':
+          if is_offroad:
+            safe_put_all({"FormatSDCard": True}, True)
+        case 'remoteSupport':
+          self.run_remote_support()
     except Exception as e:
-      cloudlog.error(f"BLE settings receiving error: {e}")
+      cloudlog.error(f"Apply BLE settings error: {e}")
+
+  def handle_send_channel(self, msg):
+    """Check for dongle ID and send channel message for received messages"""
+    c, p = msg
+    try:
+      m = msgpack.unpackb(p)
+    except Exception as e:
+      cloudlog.error(f"msgpack unpack error: {e}")
+      return None
+    if DONGLE_ID not in m.pop('deviceList', []):
+      return None
+    if m.get('msgType') == 'curPage':
+      self.send_channel = c
+      return None
+    return c, m # Other message types, pass to next function
 
   def streamd_thread(self):
     is_metric = None
@@ -326,22 +339,8 @@ class Streamer:
       (sm := self.sm).update(SM_UPDATE_INTERVAL)
       (rk := self.rk).monitor_time()
 
-      is_offroad = None # Always get latest is_offroad
-      # Apply any newly received settings message immediately, before sending
-      while (msg := self.receiver.get_message()) is not None:
-        is_offroad = params.get_bool("IsOffroad") if is_offroad is None else is_offroad
-        self.apply_settings_message(msg, sm['controlsState'].state, cur_time, is_offroad)
-
-      # 3 Hz settings send
-      if (cur_time := monotonic()) - self.last_periodic_time >= 0.333:
-        self.last_periodic_time = cur_time
-        state = sm['controlsState'].state
-        is_offroad = params.get_bool("IsOffroad") if is_offroad is None else is_offroad
-        is_metric = params.get_bool("IsMetric")
-        self.send_settings_message(is_offroad, state, is_metric)
-
-      # 1 Hz WiFi tasks
-      if cur_time - self.last_1hz_task_time >= 1:
+      # 1 Hz WiFi task
+      if (cur_time := monotonic()) - self.last_1hz_task_time >= 1:
         self.last_1hz_task_time = cur_time
         self.update_wlan_info_async()
         if attempt_ssid := self.wifi_connect_attempt_ssid:
@@ -355,8 +354,34 @@ class Streamer:
             self.wifi_connect_attempt_ssid = None
             self.wifi_connect_attempt_start_time = None
 
-      # Visualisation send
-      self.send_visualisation_message(is_metric)
+      if self.ble.connected: # Only receive/send if connected
+        is_offroad = None # Always get latest is_offroad
+        state = None
+        # Apply any newly received message before sending
+        while (msg := self.receiver.get_message()) is not None:
+          if not (res := self.handle_send_channel(msg)):
+            continue # If dongle ID does not match or it is a curPage message
+          if is_offroad is None:
+            is_offroad = params.get_bool("IsOffroad")
+          if state is None:
+            state = sm['controlsState'].state
+          self.apply_settings_message(res, state, cur_time, is_offroad)
+
+        # 3 Hz settings send
+        if cur_time - self.last_periodic_time >= 0.333:
+          self.last_periodic_time = cur_time
+          is_metric = params.get_bool("IsMetric") # Always update at 3 Hz
+          if self.send_channel == CHANNEL_SETTINGS:
+            if is_offroad is None:
+              is_offroad = params.get_bool("IsOffroad")
+            if state is None:
+              state = sm['controlsState'].state
+            self.send_settings_message(is_offroad, state, is_metric)
+
+        # Visualisation send
+        if self.send_channel == CHANNEL_VISUALISATION:
+          self.send_visualisation_message(is_metric)
+
       rk.keep_time()
 
 if __name__ == "__main__":

@@ -42,11 +42,14 @@ class BLEBridge:
 
     self.dev.on_connect = self.on_connect
     self.dev.on_disconnect = self.on_disconnect
+    self.connected = False
 
   def on_connect(self, dev):
+    self.connected = True
     print(f"BLE Connected: {dev.address}")
 
   def on_disconnect(self, adapter_addr, dev_addr):
+    self.connected = False
     print(f"BLE Disconnected: {dev_addr}")
 
   def notify_state(self, notifying, characteristic):
@@ -96,31 +99,35 @@ class ChunkReceiver:
     """Continuously read BLE packets, assemble chunks, drop timed-out messages."""
     while True:
       processed_packet = False
-      while pkt := self.ble.read():
-        processed_packet = True
-        channel, msg_id, total_segments, seg_idx = pkt[:4]
-        chunk = pkt[4:]
-        key = (channel, msg_id)
-        now = monotonic() # assign once per packet
-        with self.lock:
-          if key not in self.active_messages:
-            self.active_messages[key] = [[None]*total_segments, total_segments, now]
-          self.active_messages[key][0][seg_idx] = chunk
-          self.active_messages[key][2] = now
+      if self.ble.connected:
+        while pkt := self.ble.read():
+          processed_packet = True
+          channel, msg_id, total_segments, seg_idx = pkt[:4]
+          chunk = pkt[4:]
+          key = (channel, msg_id)
+          now = monotonic() # assign once per packet
+          with self.lock:
+            entry = self.active_messages.get(key)
+            if entry is None:
+              entry = [[None]*total_segments, total_segments, now]
+              self.active_messages[key] = entry
+            chunks_list, total, _ = entry
+            chunks_list[seg_idx] = chunk
+            entry[2] = now
 
-          if all(self.active_messages[key][0]):
-            msg = b''.join(self.active_messages[key][0])
-            self.completed_messages.put((channel, msg))
-            del self.active_messages[key]
+            if None not in chunks_list:
+              msg = b''.join(chunks_list)
+              self.completed_messages.put((channel, msg))
+              del self.active_messages[key]
 
-          for key2, (chunks, total, last_time) in list(self.active_messages.items()):
-            if now - last_time > CHUNK_TIMEOUT: # Drop timed-out messages
-              print(f"Dropping incomplete message on channel {key2[0]} id {key2[1]}")
-              del self.active_messages[key2]
+            for key2, (chunks, total, last_time) in list(self.active_messages.items()):
+              if now - last_time > CHUNK_TIMEOUT: # Drop timed-out messages
+                print("Dropping incomplete message")
+                del self.active_messages[key2]
 
       if not processed_packet:
         sleep(0.01) # Small sleep only if no packets to process
 
   def get_message(self):
     """Return the next completed message if available."""
-    return self.completed_messages.get() if not self.completed_messages.empty() else None
+    return q.get() if not (q := self.completed_messages).empty() else None
