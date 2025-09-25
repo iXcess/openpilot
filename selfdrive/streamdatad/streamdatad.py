@@ -269,15 +269,16 @@ class Streamer:
       c, settings = message
       if c != CHANNEL_SETTINGS:
         return
-      match settings.pop('msgType'):
+      match settings.pop('msgType', None):
         case 'saveToggle':
           safe_put_all(settings, True)
         case 'saveConfig':
-          if fix_fp := settings.get('FixFingerprint'):
+          if fix_fp := settings.pop('FixFingerprint', None):
             if (fix_fp := fix_fp.strip()) == "" or is_supported_model(fix_fp):
               safe_put_all({'FixFingerprint': fix_fp})
-          if features_to_add := settings.get('FeaturesPackage'):
+          if features_to_add := settings.pop('FeaturesPackage', None):
             features.set_features(features_to_add)
+          # Put string setting if not one of the above keys, ensure above keys are popped
           safe_put_all(settings)
         case 'resetCalibration':
           reset_calibration(state)
