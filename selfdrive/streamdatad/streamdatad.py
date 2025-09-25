@@ -16,7 +16,7 @@ from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 from openpilot.common.features import Features
-from ble_helper import BLEBridge, ChunkReceiver
+from openpilot.selfdrive.streamdatad.ble_helper import BLEBridge, ChunkReceiver
 
 MESSAGE_HZ = 16 # Expected message rate, must match app visualisation value
 params = Params()
@@ -258,10 +258,20 @@ class Streamer:
       cloudlog.error(f"BLE settings sending error: {e}")
 
   def run_remote_support(self):
-    threading.Thread(target=lambda: setattr(
-      self, "supportTunnelOutput",
-      subprocess.run(["/usr/kommu/support_tunnel.py"], capture_output=True, text=True).stdout.strip()
-    ), daemon=True).start()
+    def worker():
+      proc = subprocess.Popen(
+        ["python3", "-u", "/usr/kommu/support_tunnel.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1
+      )
+      self.supportTunnelProcess = proc
+
+      # Capture the first line (the port)
+      if (line := proc.stdout.readline()):
+        self.supportTunnelOutput = line.strip()
+    threading.Thread(target=worker, daemon=True).start()
 
   def apply_settings_message(self, message, state, cur_time, is_offroad):
     """Apply a valid assembled settings message immediately."""
@@ -386,5 +396,8 @@ class Streamer:
 
       rk.keep_time()
 
-if __name__ == "__main__":
+def main():
   Streamer().streamd_thread()
+
+if __name__ == "__main__":
+  main()
