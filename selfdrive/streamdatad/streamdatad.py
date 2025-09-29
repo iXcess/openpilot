@@ -41,8 +41,7 @@ OS_VERSION = HARDWARE.get_os_version()
 def forget_wifi_network(ssid):
   if not ssid:
     return False
-  threading.Thread(daemon=True, target=lambda: subprocess.run(
-    ["sudo", "nmcli", "con", "delete", ssid], text=True)).start()
+  threading.Thread(daemon=True, target=lambda: subprocess.run(["sudo", "nmcli", "con", "delete", ssid], text=True)).start()
   return True
 
 def check_for_updates():
@@ -111,6 +110,14 @@ def do_reboot(state):
   if state == log.ControlsState.OpenpilotState.disabled:
     params.put_bool_nonblocking("DoReboot", True)
 
+def enable_hotspot():
+  def start_service():
+    try:
+      subprocess.run(["sudo", "systemctl", "start", "wlan1-setup.service"])
+    except Exception as e:
+      cloudlog.error(f"Failed to start hotspot service: {e}")
+  threading.Thread(target=start_service, daemon=True).start()
+
 def update_dict_from_sm(target_dict, sm_subset, keys):
   try:
     c = sm_subset.to_dict()
@@ -153,6 +160,8 @@ class Streamer:
     threading.Thread(target=self.ble.start, daemon=True).start() # Start BLE peripheral
     self.receiver = ChunkReceiver(self.ble) # Handle incoming messages in separate thread
     self.send_channel = None # Keep track of which channel to send messages
+    self.hotspot_enabled = False
+    self.hotspot_ip = None
 
   def connect_to_wifi(self, ssid, password, cur_time):
     if not (ssid := ssid.strip()):
@@ -202,6 +211,17 @@ class Streamer:
       self.current_wifi_iface_name = selected_iface
     threading.Thread(target=get_wlan_info, daemon=True).start()
 
+  def check_hotspot_enabled(self):
+    def check_interface():
+      try:
+        addrs, stats = psutil.net_if_addrs(), psutil.net_if_stats()
+        self.hotspot_enabled = (s := stats.get(w1 := "wlan1")) and s.isup
+        self.hotspot_ip = next((a.address for a in addrs.get(w1, []) if a.family == 2), None) if self.hotspot_enabled else None
+      except Exception:
+        self.hotspot_enabled = False
+        self.hotspot_ip = None
+    threading.Thread(target=check_interface, daemon=True).start()
+
   def send_visualisation_message(self, is_metric):
     (data := extract_model_data((sm := self.sm)['modelV2'].to_dict()))
     data["m"] = is_metric
@@ -232,6 +252,8 @@ class Streamer:
     sett['localIP'] = self.local_wlan_ip
     sett['activeWlanSSID'] = \
       f"Connecting to\n{attempt_ssid}" if (attempt_ssid := self.wifi_connect_attempt_ssid) else self.active_wlan_ssid
+    sett['hotspotEnabled'] = self.hotspot_enabled
+    sett['hotspotIp'] = self.hotspot_ip
 
     if hasattr(self, "supportTunnelOutput"):
       sett["supportTunnelOutput"] = self.supportTunnelOutput
@@ -327,6 +349,8 @@ class Streamer:
             safe_put_all({"FormatSDCard": True}, True)
         case 'remoteSupport':
           self.run_remote_support()
+        case 'enableHotspot':
+          enable_hotspot()
     except Exception as e:
       cloudlog.error(f"Apply BLE settings error: {e}")
 
@@ -351,9 +375,10 @@ class Streamer:
       (sm := self.sm).update(SM_UPDATE_INTERVAL)
       (rk := self.rk).monitor_time()
 
-      # 1 Hz WiFi task
+      # 1 Hz WiFi/hotspot task
       if (cur_time := monotonic()) - self.last_1hz_task_time >= 1:
         self.last_1hz_task_time = cur_time
+        # Check WiFi
         self.update_wlan_info_async()
         if attempt_ssid := self.wifi_connect_attempt_ssid:
           if ((connected := self.active_wlan_ssid == attempt_ssid) or
@@ -365,6 +390,8 @@ class Streamer:
               cloudlog.info(f"Wi-Fi {attempt_ssid} connected")
             self.wifi_connect_attempt_ssid = None
             self.wifi_connect_attempt_start_time = None
+        # Check hotspot
+        self.check_hotspot_enabled()
 
       if self.ble.connected: # Only receive/send if connected
         is_offroad = None # Always get latest is_offroad
