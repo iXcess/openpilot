@@ -13,10 +13,9 @@ CHUNK_TIMEOUT = 1.0  # seconds before dropping incomplete message
 
 class BLEBridge:
   """Threaded BLE Nordic UART bridge with RX and TX."""
-  def __init__(self, local_name):
+  def __init__(self, local_name=None):
     self.ad = list(adapter.Adapter.available())[0]
     self.dev = peripheral.Peripheral(self.ad.address, local_name=local_name, appearance=963)
-    print(f"Advertising BLE as {local_name}")
 
     self.rx_queue = SimpleQueue()
     self.tx_char = None
