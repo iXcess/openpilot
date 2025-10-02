@@ -91,7 +91,7 @@ def safe_put_all(settings_to_put, is_bool=False):
   for param_key, value in settings_to_put.items():
     try:
       (params.put_bool_nonblocking if is_bool else params.put_nonblocking)(
-        param_key, value if is_bool else str(value))
+        param_key, value if is_bool else str(value).strip())
     except Exception as e:
       cloudlog.error(f"Error putting {param_key}: {e}")
 
@@ -305,12 +305,13 @@ class Streamer:
         case 'saveToggle':
           safe_put_all(settings, True)
         case 'saveConfig':
-          if fix_fp := settings.pop('FixFingerprint', None):
+          # Keep 'is not None' check for fingerprint and features to ensure empty strings are allowed (for unset)
+          if (fix_fp := settings.pop('FixFingerprint', None)) is not None:
             if (fix_fp := fix_fp.strip()) == "" or is_supported_model(fix_fp):
               safe_put_all({'FixFingerprint': fix_fp})
-          if features_to_add := settings.pop('FeaturesPackage', None):
-            features.set_features(features_to_add)
-          # Put string setting if not one of the above keys, ensure above keys are popped
+          if (features_to_set := settings.pop('FeaturesPackage', None)) is not None:
+            features.set_features(features_to_set)
+          # Put string setting if not one of the above keys, ensure above keys are popped so they will not be set below
           safe_put_all(settings)
         case 'resetCalibration':
           reset_calibration(state)
@@ -331,6 +332,7 @@ class Streamer:
             case 'fetch':
               fetch_update()
         case 'ssh':
+          # Empty string is falsy, allows removal
           if username := settings.get('username'):
             params.put_nonblocking("GithubUsername", username)
             params.put_nonblocking("GithubSshKeys", settings.get('keys'))
