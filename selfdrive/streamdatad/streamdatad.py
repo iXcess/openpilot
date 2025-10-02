@@ -364,7 +364,7 @@ class Streamer:
     except Exception as e:
       cloudlog.error(f"msgpack unpack error: {e}")
       return None
-    if DONGLE_ID not in m.pop('deviceList', []):
+    if DONGLE_ID not in (m.pop('deviceList', None) or []):
       return None
     if m.get('msgType') == 'curPage':
       self.send_channel = c
