@@ -265,9 +265,9 @@ class Streamer:
       'UpdaterFetchAvailable'
     }
     string_keys = {
-      'LongitudinalPersonality', 'HardwareSerial', 'FeaturesPackage', 'FixFingerprint',
+      'LongitudinalPersonality', 'FeaturesPackage', 'FixFingerprint',
       'UpdaterTargetBranch', 'UpdaterState', 'UpdateFailedCount',
-      'LastUpdateTime', 'GithubUsername'
+      'LastUpdateTime', 'GithubUsername', 'GsmApn'
     }
 
     for key in bool_keys:
